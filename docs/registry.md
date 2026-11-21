@@ -32,10 +32,33 @@ pub struct SubscriptionRecord {
     pub id: u64,
     pub subscriber: Address,
     pub merchant: Address,
+    pub token: Address,
     pub total_charged: i128,
     pub status: u32,                 // 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted
 }
 ```
+
+## Per-merchant statistics
+
+```rust
+pub struct MerchantStats {
+    pub total_subscriptions: u64,    // every subscription ever registered for this merchant
+    pub active_subscriptions: u64,   // last reported status is Active, for this merchant
+    pub total_charged_volume: i128,  // sum of charges for this merchant, raw units, all tokens
+}
+```
+
+Each field counts the same way as its `RegistryStats` counterpart, but
+scoped to one merchant's `Address` instead of the whole registry.
+`total_subscriptions` and `total_charged_volume` only increase; they are
+`u64`/`i128` counters and will panic on overflow (checked arithmetic), which
+in practice requires an astronomically large number of subscriptions or
+raw-unit charges. `active_subscriptions` moves up and down as subscriptions
+transition into and out of Active.
+
+`get_merchant_stats(merchant: Address) -> MerchantStats` is callable by
+anyone and returns a zero-valued `MerchantStats` for a merchant that has
+never had a subscription registered against it — it never errors.
 
 ## Events
 
@@ -43,8 +66,10 @@ Each successful write emits exactly one event. A rejected call emits nothing.
 
 | Event | Emitted by | Data |
 |---|---|---|
-| `Registered` | `register_subscription` | `subscription_id`, `total_subscriptions` (new total) |
-| `Updated` | `update_subscription` | `subscription_id`, `total_charged`, `status` (new values) |
+| `subscription_registered` | `register_subscription` | topics: `subscription_id`, `subscriber`, `merchant` |
+| `subscription_updated` | `update_subscription` | topic: `subscription_id`; data: `total_charged`, `status` (new values) |
+
+See [events.md](events.md#registry-contract) for the full field layout.
 
 Indexers can follow these events instead of polling `get_stats`.
 
@@ -55,12 +80,13 @@ Indexers can follow these events instead of polling `get_stats`.
 | `initialize(admin)` | admin | Once. |
 | `set_writers(admin, subscription_contract, plan_contract)` | admin | Once. |
 | `register_plan(plan_id)` | plan contract | Each plan counted once. |
-| `register_subscription(subscription_id, subscriber, merchant)` | subscription contract | Starts Active. |
+| `register_subscription(subscription_id, subscriber, merchant, token)` | subscription contract | Starts Active. `token` is stored on the record. |
 | `update_subscription(subscription_id, total_charged, status)` | subscription contract | See rules below. |
 | `get_stats() -> RegistryStats` | anyone | |
+| `get_merchant_stats(merchant) -> MerchantStats` | anyone | Zero-valued if never indexed. |
 | `get_subscription_record(subscription_id)` | anyone | |
-| `get_all_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
-| `get_all_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
+| `get_all_subscriptions() -> Vec<u64>` | anyone | **Deprecated.** Oldest first. O(n): reads every id in one call. Prefer the paged form. |
+| `get_all_subscriptions_page(start, limit) -> Result<Vec<u64>, Error>` | anyone | Up to `limit` ids from index `start`, oldest first. `limit` ≤ `MAX_PAGE_SIZE` (100) or `PageSizeTooLarge`. |
 | `get_active_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
 | `get_active_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
 | `get_writers() -> Writers` | anyone | |
