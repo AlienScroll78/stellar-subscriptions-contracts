@@ -208,6 +208,7 @@ mod golden {
             ("BySubscriber", DataKey::BySubscriber(addr.clone())),
             ("ByMerchant", DataKey::ByMerchant(addr.clone())),
             ("ByMerchant", DataKey::ByMerchant(addr)),
+            ("ByPlan", DataKey::ByPlan(99)),
             ("ByPlan", DataKey::ByPlan(7)),
             ("ByPlan", DataKey::ByPlan(42)),
             ("PlanContract", DataKey::PlanContract),
