@@ -628,6 +628,29 @@ impl SubscriptionContract {
         })
     }
 
+    /// Names the reason `charge` would succeed or fail right now, covering
+    /// every `SubStatus` plus the interval and cap checks `is_chargeable`
+    /// applies while Active.
+    pub fn charge_status(env: Env, subscription_id: u64) -> Result<ChargeStatus, Error> {
+        let sub = storage::read_sub(&env, subscription_id)?;
+        let status = match sub.status {
+            SubStatus::Paused => ChargeStatus::Paused,
+            SubStatus::Cancelled => ChargeStatus::Cancelled,
+            SubStatus::Exhausted => ChargeStatus::Exhausted,
+            SubStatus::MerchantEnded => ChargeStatus::MerchantEnded,
+            SubStatus::Active => {
+                let now = env.ledger().sequence();
+                if now < sub.next_charge_ledger {
+                    ChargeStatus::TooEarly
+                } else {
+                    match sub.total_charged.checked_add(sub.amount_per_period) {
+                        Some(total) if total <= sub.total_cap => ChargeStatus::Chargeable,
+                        _ => ChargeStatus::CapWouldBeExceeded,
+                    }
+                }
+            }
+        };
+        Ok(status)
     /// Why `charge` would succeed or fail right now. Agrees with
     /// `is_chargeable`: `Chargeable` exactly when that returns true.
     pub fn charge_status(env: Env, subscription_id: u64) -> Result<ChargeStatus, Error> {

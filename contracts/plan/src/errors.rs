@@ -39,6 +39,9 @@ pub enum Error {
     RegistryUpdateFailed = 13,
     /// `page_size` must be between 1 and 1000.
     InvalidPageSize = 14,
+    /// `description` must be at most 256 bytes.
+    InvalidDescription = 15,
+}
     /// Description must be at most `MAX_DESCRIPTION_LEN` bytes.
     InvalidDescription = 15,
 }

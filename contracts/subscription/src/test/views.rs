@@ -6,6 +6,10 @@ use super::setup::{expect_err, Setup, AMOUNT, CAP, INTERVAL};
 use crate::{Error, SubStatus};
 
 #[test]
+fn get_registry_and_get_plan_contract_are_none_before_those_links_are_set() {
+    let s = Setup::new();
+    assert_eq!(s.client.get_registry(), None);
+    assert_eq!(s.client.get_plan_contract(), None);
 fn get_by_subscriber_preserves_creation_order_with_interleaved_subscribers() {
     let s = Setup::new();
     let other_subscriber = Address::generate(&s.env);

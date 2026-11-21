@@ -16,7 +16,7 @@ pub use errors::Error;
 pub use types::Plan;
 
 use soroban_sdk::{
-    contract, contractclient, contractevent, contractimpl, Address, Env, String, Vec,
+    contract, contractclient, contractevent, contractimpl, Address, Env, Option, String, Vec,
 };
 use storage::DataKey;
 
@@ -94,6 +94,22 @@ pub struct PlanDeactivated {
     /// Merchant who deactivated the plan.
     #[topic]
     pub merchant: Address,
+}
+
+/// A merchant set, changed, or cleared a plan's description.
+// See the `#[allow(missing_docs)]` note on `PlanCreated` above.
+#[allow(missing_docs)]
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanDescriptionUpdated {
+    /// Id of the plan that was updated.
+    #[topic]
+    pub plan_id: u64,
+    /// Merchant who updated the plan.
+    #[topic]
+    pub merchant: Address,
+    /// The new description, or `None` if it was cleared.
+    pub description: Option<String>,
 }
 
 /// The plan contract's entry point.
@@ -192,6 +208,7 @@ impl PlanContract {
             subscriber_count: 0,
             active: true,
             created_at: env.ledger().sequence(),
+            description: Option::None,
         };
         storage::write_plan(&env, &plan);
         storage::push_index(&env, DataKey::ByMerchant(plan.merchant.clone()), id);
@@ -287,6 +304,38 @@ impl PlanContract {
         storage::write_plan(&env, &plan);
         storage::bump_instance(&env);
         PlanDeactivated { plan_id, merchant }.publish(&env);
+        Ok(())
+    }
+
+    /// Set, change, or clear (`None`) a plan's off-chain description — a
+    /// hosted terms document, pricing page, or logo URL. Requires the
+    /// signature of the merchant who created the plan.
+    pub fn update_plan_description(
+        env: Env,
+        merchant: Address,
+        plan_id: u64,
+        description: Option<String>,
+    ) -> Result<(), Error> {
+        merchant.require_auth();
+        let mut plan = storage::read_plan(&env, plan_id)?;
+        if plan.merchant != merchant {
+            return Err(Error::NotPlanMerchant);
+        }
+        if let Some(d) = &description {
+            if d.len() > MAX_DESCRIPTION_LEN {
+                return Err(Error::InvalidDescription);
+            }
+        }
+
+        plan.description = description.clone();
+        storage::write_plan(&env, &plan);
+        storage::bump_instance(&env);
+        PlanDescriptionUpdated {
+            plan_id,
+            merchant,
+            description,
+        }
+        .publish(&env);
         Ok(())
     }
 

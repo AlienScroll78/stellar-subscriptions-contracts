@@ -113,6 +113,15 @@ fn the_charge_that_reaches_the_cap_reports_exhaustion() {
 }
 
 #[test]
+fn charged_event_token_matches_the_subscriptions_token() {
+    let s = Setup::new();
+    let id = s.subscribe();
+    let now = s.ledger();
+    s.client.charge(&s.merchant, &id);
+
+    let sub = s.sub(id);
+    assert_eq!(sub.token, s.token.address);
+
 fn exhausted_is_false_until_the_final_charge() {
     let s = Setup::new();
     // Cap = 3 periods, so the third charge exactly exhausts it.
@@ -143,6 +152,13 @@ fn exhausted_is_false_until_the_final_charge() {
         Charged {
             subscription_id: id,
             merchant: s.merchant.clone(),
+            token: sub.token.clone(),
+            amount: AMOUNT,
+            total_charged: AMOUNT,
+            next_charge_ledger: now + INTERVAL,
+            exhausted: false,
+        },
+    );
             token: s.token.address.clone(),
             amount: AMOUNT,
             total_charged: 3 * AMOUNT,
