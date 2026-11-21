@@ -30,7 +30,11 @@ pub struct RegistryStats {
     pub total_subscriptions: u64,
     /// Subscriptions whose last reported status is Active.
     pub active_subscriptions: u64,
-    /// Sum of every reported charge, across all tokens, in raw units.
+    /// **Warning:** the sum of every reported charge across all tokens, in raw
+    /// token units. Tokens have different decimals and values, so this is not
+    /// a currency amount. 1 XLM and 1 USDC each add their raw units to this
+    /// total. Do not present it as a dollar or total-value figure; use
+    /// per-token totals from an indexer instead.
     pub total_charged_volume: i128,
 }
 

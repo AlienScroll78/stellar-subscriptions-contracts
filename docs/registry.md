@@ -34,7 +34,7 @@ pub struct SubscriptionRecord {
     pub merchant: Address,
     pub token: Address,
     pub total_charged: i128,
-    pub status: u32,                 // 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted
+    pub status: u32,                 // 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted, 4 MerchantEnded
 }
 ```
 
@@ -85,6 +85,9 @@ Indexers can follow these events instead of polling `get_stats`.
 | `get_stats() -> RegistryStats` | anyone | |
 | `get_merchant_stats(merchant) -> MerchantStats` | anyone | Zero-valued if never indexed. |
 | `get_subscription_record(subscription_id)` | anyone | |
+| `get_all_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
+| `get_all_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
+| `get_sub_records_by_merchant(merchant, start, limit) -> Result<Vec<SubscriptionRecord>, Error>` | anyone | One page of a merchant's records, oldest first. Empty if none or `start` is past the end. |
 | `get_all_subscriptions() -> Vec<u64>` | anyone | **Deprecated.** Oldest first. O(n): reads every id in one call. Prefer the paged form. |
 | `get_all_subscriptions_page(start, limit) -> Result<Vec<u64>, Error>` | anyone | Up to `limit` ids from index `start`, oldest first. `limit` ≤ `MAX_PAGE_SIZE` (100) or `PageSizeTooLarge`. |
 | `get_active_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
@@ -96,9 +99,9 @@ Indexers can follow these events instead of polling `get_stats`.
 `update_subscription` mirrors the subscription contract's own rules so the
 index can never reach a state the subscription contract could not:
 
-- `status` must be 0–3 (`InvalidStatus`);
+- `status` must be 0–4 (`InvalidStatus`);
 - `total_charged` never decreases (`ChargedDecreased`);
-- a Cancelled or Exhausted record never changes again (`AlreadyFinal`);
+- a Cancelled, Exhausted or MerchantEnded record never changes again (`AlreadyFinal`);
 - `total_charged_volume` grows by exactly the increase, with checked
   arithmetic;
 - `active_subscriptions` moves only on a real transition into or out of
@@ -106,9 +109,11 @@ index can never reach a state the subscription contract could not:
 
 ## Caveats
 
-- `total_charged_volume` adds raw token units across **all tokens**. It is a
-  activity signal, not a currency amount. Per-token volume belongs in an
-  indexer.
+- **Warning: `total_charged_volume` is not a currency amount.** It adds raw
+  token units across **all tokens** with no decimal or price normalization.
+  1 XLM (7 decimals) and 1 USDC (7 decimals) each add their raw units, so
+  mixed-token totals are meaningless as value. Use it only as an activity
+  signal, and take per-token volume from an indexer.
 - `get_active_subscriptions` walks every registered subscription.
 - Plans and subscriptions created before the registry was linked would be
   missing, which is why both the plan and subscription contracts only accept

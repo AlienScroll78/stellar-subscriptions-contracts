@@ -41,6 +41,9 @@ pub const VERSION: u32 = 1;
 /// Largest page `get_active_subscriptions_page` will return.
 const MAX_PAGE_SIZE: u32 = 1000;
 
+/// Version of this contract, bumped on each incompatible change.
+pub const VERSION: u32 = 1;
+
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
 #[allow(missing_docs)]
@@ -97,6 +100,11 @@ impl RegistryContract {
         storage::read_writers(&env)
     }
 
+    /// Version of this contract.
+    pub fn version() -> u32 {
+        VERSION
+    }
+
     /// Count a new plan. Only the plan contract may call this.
     pub fn register_plan(env: Env, plan_id: u64) -> Result<(), Error> {
         storage::read_writers(&env)?.plan_contract.require_auth();
@@ -140,6 +148,7 @@ impl RegistryContract {
             },
         );
         storage::push_id(&env, subscription_id);
+        storage::push_merchant_id(&env, &merchant, subscription_id);
 
         let mut stats = storage::read_stats(&env);
         stats.total_subscriptions = stats
@@ -263,10 +272,34 @@ impl RegistryContract {
     }
 
     /// Current aggregate stats across every indexed plan and subscription.
+    ///
+    /// **Warning:** `total_charged_volume` sums raw token units across all
+    /// tokens with no normalization. Mixing tokens with different decimals
+    /// makes it meaningless as a currency amount. See `docs/registry.md`.
     pub fn get_stats(env: Env) -> RegistryStats {
         storage::read_stats(&env)
     }
 
+    /// One page of a merchant's subscription records, oldest first.
+    ///
+    /// Returns up to `limit` records starting at position `start` in that
+    /// merchant's list. A merchant with no subscriptions, or a `start` past
+    /// the end, yields an empty list.
+    pub fn get_sub_records_by_merchant(
+        env: Env,
+        merchant: Address,
+        start: u32,
+        limit: u32,
+    ) -> Result<Vec<SubscriptionRecord>, Error> {
+        let ids = storage::read_merchant_ids(&env, &merchant);
+        let end = start.saturating_add(limit).min(ids.len());
+        let mut out = Vec::new(&env);
+        for i in start..end {
+            if let Some(id) = ids.get(i) {
+                out.push_back(storage::read_record(&env, id)?);
+            }
+        }
+        Ok(out)
     /// Current aggregate stats scoped to one merchant. Returns a
     /// zero-valued `MerchantStats` if the merchant has never been indexed.
     /// Aggregate stats for one merchant's subscriptions. A merchant with no
