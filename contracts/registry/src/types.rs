@@ -8,11 +8,13 @@ pub const STATUS_PAUSED: u32 = 1;
 pub const STATUS_CANCELLED: u32 = 2;
 /// Matches the subscription contract's `SubStatus::Exhausted` discriminant.
 pub const STATUS_EXHAUSTED: u32 = 3;
+/// Matches the subscription contract's `SubStatus::MerchantEnded` discriminant.
+pub const STATUS_MERCHANT_ENDED: u32 = 4;
 
-/// Whether a status code is final (`Cancelled` or `Exhausted`), meaning the
-/// record it belongs to can never change again.
+/// Whether a status code is final (`Cancelled`, `Exhausted` or
+/// `MerchantEnded`), meaning the record it belongs to can never change again.
 pub fn is_final(status: u32) -> bool {
-    status == STATUS_CANCELLED || status == STATUS_EXHAUSTED
+    status == STATUS_CANCELLED || status == STATUS_EXHAUSTED || status == STATUS_MERCHANT_ENDED
 }
 
 /// Aggregate counters across every indexed plan and subscription.

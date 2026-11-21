@@ -16,5 +16,6 @@ mod hostile_token;
 mod integration;
 mod interval_limits;
 mod simulation_drift;
+mod status_sync;
 mod validation;
 mod views;
