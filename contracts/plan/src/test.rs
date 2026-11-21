@@ -461,3 +461,9 @@ fn get_plans_by_token_only_includes_plans_for_that_token() {
     assert_eq!(ids(s.client.get_plans_by_token(&s.token, &0, &10)), [a, c]);
     assert_eq!(ids(s.client.get_plans_by_token(&other_token, &0, &10)), [b]);
 }
+
+#[test]
+fn get_registry_is_none_before_it_is_set() {
+    let s = Setup::new();
+    assert_eq!(s.client.get_registry(), None);
+}
