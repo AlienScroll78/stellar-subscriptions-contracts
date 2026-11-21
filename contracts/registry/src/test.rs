@@ -3,11 +3,12 @@ extern crate std;
 use core::fmt::Debug;
 
 use soroban_sdk::{
-    testutils::{Address as _, MockAuth, MockAuthInvoke},
-    Address, Env, IntoVal,
+    testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke},
+    Address, Env, Event, IntoVal,
 };
 
 use crate::{
+    events::{SubscriptionRegistered, SubscriptionUpdated},
     Error, RegistryContract, RegistryContractClient, RegistryStats, SubscriptionRecord,
     STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_PAUSED,
 };
@@ -389,4 +390,51 @@ fn page_size_above_the_maximum_is_rejected() {
         ids(s.client.get_all_subscriptions_page(&0, &crate::MAX_PAGE_SIZE)),
         std::vec![1]
     );
+}
+
+/// The last invocation emitted exactly `expected` from the registry.
+fn assert_only_event<E: Event>(s: &Setup, expected: E) {
+    assert_eq!(
+        s.env.events().all().filter_by_contract(&s.client.address),
+        [expected.to_xdr(&s.env, &s.client.address)]
+    );
+}
+
+#[test]
+fn register_emits_subscription_registered() {
+    let s = Setup::new();
+    s.register(7);
+    assert_only_event(
+        &s,
+        SubscriptionRegistered {
+            subscription_id: 7,
+            subscriber: s.subscriber.clone(),
+            merchant: s.merchant.clone(),
+        },
+    );
+}
+
+#[test]
+fn update_emits_subscription_updated_with_new_values() {
+    let s = Setup::new();
+    s.register(7);
+    s.client.update_subscription(&7, &250, &STATUS_PAUSED);
+    assert_only_event(
+        &s,
+        SubscriptionUpdated {
+            subscription_id: 7,
+            total_charged: 250,
+            status: STATUS_PAUSED,
+        },
+    );
+}
+
+#[test]
+fn rejected_writes_emit_no_events() {
+    let s = Setup::new();
+    s.register(7);
+    // A decreasing total is refused, so nothing is published.
+    s.client.update_subscription(&7, &100, &STATUS_ACTIVE);
+    assert!(s.client.try_update_subscription(&7, &50, &STATUS_ACTIVE).is_err());
+    assert!(s.env.events().all().filter_by_contract(&s.client.address) == std::vec::Vec::new());
 }

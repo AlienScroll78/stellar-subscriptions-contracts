@@ -12,6 +12,7 @@
 //! parties.
 
 mod errors;
+mod events;
 mod storage;
 mod types;
 
@@ -27,7 +28,9 @@ pub use types::{
     STATUS_PAUSED,
 };
 
-use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Env, Event, Vec};
+
+use crate::events::{SubscriptionRegistered, SubscriptionUpdated};
 
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
@@ -112,8 +115,8 @@ impl RegistryContract {
             &env,
             &SubscriptionRecord {
                 id: subscription_id,
-                subscriber,
-                merchant,
+                subscriber: subscriber.clone(),
+                merchant: merchant.clone(),
                 total_charged: 0,
                 status: STATUS_ACTIVE,
             },
@@ -131,6 +134,12 @@ impl RegistryContract {
             .ok_or(Error::Overflow)?;
         storage::write_stats(&env, &stats);
         storage::bump_instance(&env);
+        SubscriptionRegistered {
+            subscription_id,
+            subscriber,
+            merchant,
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -188,6 +197,12 @@ impl RegistryContract {
         storage::write_record(&env, &record);
         storage::write_stats(&env, &stats);
         storage::bump_instance(&env);
+        SubscriptionUpdated {
+            subscription_id,
+            total_charged,
+            status,
+        }
+        .publish(&env);
         Ok(())
     }
 
