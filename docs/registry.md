@@ -61,6 +61,7 @@ Indexers can follow these events instead of polling `get_stats`.
 | `get_subscription_record(subscription_id)` | anyone | |
 | `get_all_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
 | `get_all_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
+| `get_sub_records_by_merchant(merchant, start, limit) -> Result<Vec<SubscriptionRecord>, Error>` | anyone | One page of a merchant's records, oldest first. Empty if none or `start` is past the end. |
 | `get_active_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
 | `get_active_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
 | `get_writers() -> Writers` | anyone | |

@@ -115,12 +115,13 @@ impl RegistryContract {
             &SubscriptionRecord {
                 id: subscription_id,
                 subscriber,
-                merchant,
+                merchant: merchant.clone(),
                 total_charged: 0,
                 status: STATUS_ACTIVE,
             },
         );
         storage::push_id(&env, subscription_id);
+        storage::push_merchant_id(&env, &merchant, subscription_id);
 
         let mut stats = storage::read_stats(&env);
         stats.total_subscriptions = stats
@@ -200,6 +201,28 @@ impl RegistryContract {
     /// makes it meaningless as a currency amount. See `docs/registry.md`.
     pub fn get_stats(env: Env) -> RegistryStats {
         storage::read_stats(&env)
+    }
+
+    /// One page of a merchant's subscription records, oldest first.
+    ///
+    /// Returns up to `limit` records starting at position `start` in that
+    /// merchant's list. A merchant with no subscriptions, or a `start` past
+    /// the end, yields an empty list.
+    pub fn get_sub_records_by_merchant(
+        env: Env,
+        merchant: Address,
+        start: u32,
+        limit: u32,
+    ) -> Result<Vec<SubscriptionRecord>, Error> {
+        let ids = storage::read_merchant_ids(&env, &merchant);
+        let end = start.saturating_add(limit).min(ids.len());
+        let mut out = Vec::new(&env);
+        for i in start..end {
+            if let Some(id) = ids.get(i) {
+                out.push_back(storage::read_record(&env, id)?);
+            }
+        }
+        Ok(out)
     }
 
     /// Look up one subscription's indexed record by id.

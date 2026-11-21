@@ -218,6 +218,47 @@ fn volume_sums_raw_units_across_tokens_without_normalization() {
 }
 
 #[test]
+fn merchant_records_are_listed_with_pagination() {
+    let s = Setup::new();
+    let other_merchant = Address::generate(&s.env);
+    for id in 1..=3u64 {
+        s.register(id);
+    }
+    s.client
+        .register_subscription(&4, &s.subscriber, &other_merchant);
+
+    let page = s.client.get_sub_records_by_merchant(&s.merchant, &0, &2);
+    let page_ids: std::vec::Vec<u64> = page.iter().map(|r| r.id).collect();
+    assert_eq!(page_ids, [1, 2]);
+
+    let rest = s.client.get_sub_records_by_merchant(&s.merchant, &2, &2);
+    let rest_ids: std::vec::Vec<u64> = rest.iter().map(|r| r.id).collect();
+    assert_eq!(rest_ids, [3]);
+
+    let other = s
+        .client
+        .get_sub_records_by_merchant(&other_merchant, &0, &10);
+    assert_eq!(other.len(), 1);
+    assert_eq!(other.get(0).unwrap().id, 4);
+}
+
+#[test]
+fn merchant_with_no_subscriptions_gets_an_empty_list() {
+    let s = Setup::new();
+    s.register(1);
+    let nobody = Address::generate(&s.env);
+    assert!(s
+        .client
+        .get_sub_records_by_merchant(&nobody, &0, &10)
+        .is_empty());
+    // A start past the end is also empty, not an error.
+    assert!(s
+        .client
+        .get_sub_records_by_merchant(&s.merchant, &5, &10)
+        .is_empty());
+}
+
+#[test]
 fn total_charged_can_never_decrease() {
     let s = Setup::new();
     s.register(1);
