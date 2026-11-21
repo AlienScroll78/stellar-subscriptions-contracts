@@ -33,7 +33,7 @@ pub struct SubscriptionRecord {
     pub subscriber: Address,
     pub merchant: Address,
     pub total_charged: i128,
-    pub status: u32,                 // 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted
+    pub status: u32,                 // 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted, 4 MerchantEnded
 }
 ```
 
@@ -70,7 +70,7 @@ Indexers can follow these events instead of polling `get_stats`.
 `update_subscription` mirrors the subscription contract's own rules so the
 index can never reach a state the subscription contract could not:
 
-- `status` must be 0–3 (`InvalidStatus`);
+- `status` must be 0–4 (`InvalidStatus`);
 - `total_charged` never decreases (`ChargedDecreased`);
 - a Cancelled or Exhausted record never changes again (`AlreadyFinal`);
 - `total_charged_volume` grows by exactly the increase, with checked
