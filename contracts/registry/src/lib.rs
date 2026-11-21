@@ -17,11 +17,14 @@ mod types;
 
 pub use errors::Error;
 pub use types::{
-    RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
-    STATUS_PAUSED,
+    MerchantStats, RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED,
+    STATUS_EXHAUSTED, STATUS_PAUSED,
 };
 
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
+
+/// Version of this contract, bumped on each incompatible change.
+pub const VERSION: u32 = 1;
 
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
@@ -31,6 +34,11 @@ pub struct RegistryContract;
 
 #[contractimpl]
 impl RegistryContract {
+    /// Version of this contract.
+    pub fn version() -> u32 {
+        VERSION
+    }
+
     /// Set the admin. Callable once.
     pub fn initialize(env: Env, admin: Address) -> Result<(), Error> {
         if storage::has_admin(&env) {
@@ -107,7 +115,7 @@ impl RegistryContract {
             &SubscriptionRecord {
                 id: subscription_id,
                 subscriber,
-                merchant,
+                merchant: merchant.clone(),
                 total_charged: 0,
                 status: STATUS_ACTIVE,
             },
@@ -124,6 +132,17 @@ impl RegistryContract {
             .checked_add(1)
             .ok_or(Error::Overflow)?;
         storage::write_stats(&env, &stats);
+
+        let mut merchant_stats = storage::read_merchant_stats(&env, &merchant);
+        merchant_stats.subscriptions = merchant_stats
+            .subscriptions
+            .checked_add(1)
+            .ok_or(Error::Overflow)?;
+        merchant_stats.active_subscriptions = merchant_stats
+            .active_subscriptions
+            .checked_add(1)
+            .ok_or(Error::Overflow)?;
+        storage::write_merchant_stats(&env, &merchant, &merchant_stats);
         storage::bump_instance(&env);
         Ok(())
     }
@@ -177,10 +196,28 @@ impl RegistryContract {
                 .ok_or(Error::Overflow)?;
         }
 
+        let mut merchant_stats = storage::read_merchant_stats(&env, &record.merchant);
+        merchant_stats.total_charged_volume = merchant_stats
+            .total_charged_volume
+            .checked_add(delta)
+            .ok_or(Error::Overflow)?;
+        if was_active && !is_active {
+            merchant_stats.active_subscriptions = merchant_stats
+                .active_subscriptions
+                .checked_sub(1)
+                .ok_or(Error::Overflow)?;
+        } else if !was_active && is_active {
+            merchant_stats.active_subscriptions = merchant_stats
+                .active_subscriptions
+                .checked_add(1)
+                .ok_or(Error::Overflow)?;
+        }
+
         record.total_charged = total_charged;
         record.status = status;
         storage::write_record(&env, &record);
         storage::write_stats(&env, &stats);
+        storage::write_merchant_stats(&env, &record.merchant, &merchant_stats);
         storage::bump_instance(&env);
         Ok(())
     }
@@ -188,6 +225,12 @@ impl RegistryContract {
     /// Current aggregate stats across every indexed plan and subscription.
     pub fn get_stats(env: Env) -> RegistryStats {
         storage::read_stats(&env)
+    }
+
+    /// Aggregate stats for one merchant's subscriptions. A merchant with no
+    /// subscriptions gets zeroed stats.
+    pub fn get_merchant_stats(env: Env, merchant: Address) -> MerchantStats {
+        storage::read_merchant_stats(&env, &merchant)
     }
 
     /// Look up one subscription's indexed record by id.

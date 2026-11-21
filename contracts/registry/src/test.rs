@@ -8,8 +8,8 @@ use soroban_sdk::{
 };
 
 use crate::{
-    Error, RegistryContract, RegistryContractClient, RegistryStats, SubscriptionRecord,
-    STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_PAUSED,
+    Error, MerchantStats, RegistryContract, RegistryContractClient, RegistryStats,
+    SubscriptionRecord, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_PAUSED,
 };
 
 struct Setup {
@@ -324,6 +324,50 @@ fn only_the_plan_contract_can_register_plans() {
         .try_register_plan(&1);
     assert!(result.is_err());
     assert_eq!(s.stats().total_plans, 0);
+}
+
+#[test]
+fn merchant_stats_follow_register_charge_and_cancel() {
+    let s = Setup::new();
+    s.register(1);
+    s.register(2);
+    assert_eq!(
+        s.client.get_merchant_stats(&s.merchant),
+        MerchantStats {
+            subscriptions: 2,
+            active_subscriptions: 2,
+            total_charged_volume: 0,
+        }
+    );
+
+    s.client.update_subscription(&1, &100, &STATUS_ACTIVE);
+    s.client.update_subscription(&2, &50, &STATUS_PAUSED);
+    s.client.update_subscription(&1, &150, &STATUS_CANCELLED);
+
+    assert_eq!(
+        s.client.get_merchant_stats(&s.merchant),
+        MerchantStats {
+            subscriptions: 2,
+            active_subscriptions: 0,
+            total_charged_volume: 200,
+        }
+    );
+}
+
+#[test]
+fn merchant_stats_are_kept_per_merchant() {
+    let s = Setup::new();
+    let other = Address::generate(&s.env);
+    s.register(1);
+    s.client.register_subscription(&2, &s.subscriber, &other);
+
+    assert_eq!(s.client.get_merchant_stats(&s.merchant).subscriptions, 1);
+    assert_eq!(s.client.get_merchant_stats(&other).subscriptions, 1);
+    let stranger = Address::generate(&s.env);
+    assert_eq!(
+        s.client.get_merchant_stats(&stranger),
+        MerchantStats::default()
+    );
 }
 
 #[test]
