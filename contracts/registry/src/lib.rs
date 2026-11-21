@@ -23,6 +23,9 @@ pub use types::{
 
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
+/// Version of this contract, bumped on each incompatible change.
+pub const VERSION: u32 = 1;
+
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
 #[allow(missing_docs)]
@@ -72,6 +75,11 @@ impl RegistryContract {
     /// The contracts currently allowed to write to the registry.
     pub fn get_writers(env: Env) -> Result<Writers, Error> {
         storage::read_writers(&env)
+    }
+
+    /// Version of this contract.
+    pub fn version() -> u32 {
+        VERSION
     }
 
     /// Count a new plan. Only the plan contract may call this.
