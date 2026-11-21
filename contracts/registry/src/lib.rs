@@ -25,7 +25,7 @@ pub const MAX_PAGE_SIZE: u32 = 100;
 pub use errors::Error;
 pub use types::{
     RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
-    STATUS_PAUSED,
+    STATUS_MERCHANT_ENDED, STATUS_PAUSED,
 };
 
 use soroban_sdk::{contract, contractimpl, Address, Env, Event, Vec};
@@ -160,7 +160,7 @@ impl RegistryContract {
         storage::read_writers(&env)?
             .subscription_contract
             .require_auth();
-        if status > STATUS_EXHAUSTED {
+        if status > STATUS_MERCHANT_ENDED {
             return Err(Error::InvalidStatus);
         }
         let mut record = storage::read_record(&env, subscription_id)?;

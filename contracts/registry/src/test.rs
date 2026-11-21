@@ -10,7 +10,7 @@ use soroban_sdk::{
 use crate::{
     events::{SubscriptionRegistered, SubscriptionUpdated},
     Error, RegistryContract, RegistryContractClient, RegistryStats, SubscriptionRecord,
-    STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_PAUSED,
+    STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_MERCHANT_ENDED, STATUS_PAUSED,
 };
 
 struct Setup {
@@ -208,6 +208,38 @@ fn charges_accumulate_volume_by_their_increase() {
 }
 
 #[test]
+fn total_charged_volume_overflow_near_i128_max_is_rejected_and_leaves_state_unchanged() {
+    let s = Setup::new();
+    s.register(1);
+    s.register(2);
+
+    // Bring total_charged_volume near i128::MAX across two subscriptions.
+    s.client
+        .update_subscription(&1, &(i128::MAX - 100), &STATUS_ACTIVE);
+    s.client.update_subscription(&2, &50, &STATUS_ACTIVE);
+
+    let stats_before = s.stats();
+    assert_eq!(stats_before.total_charged_volume, i128::MAX - 50);
+    assert_eq!(s.client.get_subscription_record(&2).total_charged, 50);
+
+    // Subscription 2 reports total_charged = 101 -> delta = 51.
+    // Adding 51 to (i128::MAX - 50) would push total_charged_volume past i128::MAX.
+    expect_err(
+        s.client.try_update_subscription(&2, &101, &STATUS_ACTIVE),
+        Error::Overflow,
+    );
+
+    // Stats and record.total_charged must remain unchanged after the failed update.
+    assert_eq!(s.stats(), stats_before);
+    assert_eq!(s.client.get_subscription_record(&2).total_charged, 50);
+    assert_eq!(s.client.get_subscription_record(&2).status, STATUS_ACTIVE);
+    assert_eq!(
+        s.client.get_subscription_record(&1).total_charged,
+        i128::MAX - 100
+    );
+}
+
+#[test]
 fn total_charged_can_never_decrease() {
     let s = Setup::new();
     s.register(1);
@@ -267,11 +299,39 @@ fn final_subscriptions_never_change_again() {
 }
 
 #[test]
+fn merchant_ended_subscriptions_never_change_again() {
+    let s = Setup::new();
+    s.register(1);
+    s.client
+        .update_subscription(&1, &100, &STATUS_MERCHANT_ENDED);
+    assert_eq!(
+        s.client.get_subscription_record(&1).status,
+        STATUS_MERCHANT_ENDED
+    );
+
+    expect_err(
+        s.client.try_update_subscription(&1, &100, &STATUS_ACTIVE),
+        Error::AlreadyFinal,
+    );
+    expect_err(
+        s.client
+            .try_update_subscription(&1, &500, &STATUS_MERCHANT_ENDED),
+        Error::AlreadyFinal,
+    );
+    assert_eq!(s.stats().total_charged_volume, 100);
+}
+
+#[test]
+fn merchant_ended_is_final() {
+    assert!(RegistryContract::is_final(STATUS_MERCHANT_ENDED));
+}
+
+#[test]
 fn unknown_status_codes_are_rejected() {
     let s = Setup::new();
     s.register(1);
     expect_err(
-        s.client.try_update_subscription(&1, &0, &4),
+        s.client.try_update_subscription(&1, &0, &5),
         Error::InvalidStatus,
     );
 }
