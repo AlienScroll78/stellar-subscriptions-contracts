@@ -1,3 +1,4 @@
+use core::option::Option;
 use soroban_sdk::{contracttype, Address, String};
 
 /// A merchant's reusable billing terms. Subscribers subscribe to a plan and

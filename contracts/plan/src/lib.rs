@@ -218,6 +218,7 @@ impl PlanContract {
             amount_per_period,
             interval_ledgers,
             default_cap,
+            description: None,
             description: description.clone(),
             subscriber_count: 0,
             active: true,

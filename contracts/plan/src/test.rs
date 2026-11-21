@@ -148,6 +148,7 @@ fn create_plan_stores_every_field() {
             amount_per_period: AMOUNT,
             interval_ledgers: INTERVAL,
             default_cap: CAP,
+            description: None,
             active: true,
             created_at: 1_000,
             description: None,
