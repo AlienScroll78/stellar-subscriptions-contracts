@@ -271,6 +271,7 @@ fn cancelling_in_one_token_leaves_the_allowance_for_another_token_untouched() {
         &INTERVAL,
         &CAP,
         &0,
+        &0,
     );
     let b = TokenClient::new(&s.env, &other_token);
     assert_eq!(s.allowance(), CAP);
@@ -380,6 +381,7 @@ fn allowance_recomputation_succeeds_with_sixty_open_subscriptions() {
             &INTERVAL,
             &CAP,
             &0,
+            &0,
         );
         ids.push(id);
     }
@@ -402,4 +404,36 @@ fn allowance_recomputation_succeeds_with_sixty_open_subscriptions() {
     for &id in &ids[..N - 1] {
         assert_eq!(s.sub(id).status, crate::SubStatus::Active);
     }
+}
+
+#[test]
+fn refresh_allowance_after_exhaustion_excludes_exhausted_caps() {
+    // A subscription whose total_charged has reached total_cap transitions to
+    // Exhausted. refresh_allowance must recompute the outstanding cap without
+    // counting the exhausted subscription, because its remaining cap is 0.
+    let s = Setup::new();
+
+    // Subscribe with a cap of exactly one period so a single charge exhausts it.
+    let exhausted_id = s.subscribe_with(AMOUNT, INTERVAL, AMOUNT);
+
+    // A second subscription that remains active.
+    let active_id = s.subscribe_with(AMOUNT, INTERVAL, CAP);
+
+    // Charge the first subscription. It hits its cap and becomes Exhausted.
+    s.client.charge(&s.merchant, &exhausted_id);
+    assert_eq!(s.sub(exhausted_id).status, crate::SubStatus::Exhausted);
+
+    // Before refresh, the allowance was set by subscribe (covering both caps).
+    // After exhaustion the first subscription's remaining cap is 0, so only
+    // the second subscription's outstanding cap should count.
+    let approved = s.client.refresh_allowance(&s.subscriber, &s.token.address);
+
+    // The exhausted subscription contributes 0 (remaining_cap = 0).
+    // The active subscription still has CAP - 0 = CAP remaining.
+    assert_eq!(approved, CAP);
+    assert_eq!(s.allowance(), CAP);
+
+    // Sanity: the active subscription is still chargeable.
+    s.client.charge(&s.merchant, &active_id);
+    assert_eq!(s.sub(active_id).total_charged, AMOUNT);
 }

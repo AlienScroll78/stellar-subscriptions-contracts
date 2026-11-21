@@ -6,6 +6,43 @@ use super::setup::{expect_err, Setup, AMOUNT, CAP, INTERVAL};
 use crate::{Error, SubStatus};
 
 #[test]
+fn get_registry_and_get_plan_contract_are_none_before_those_links_are_set() {
+    let s = Setup::new();
+    assert_eq!(s.client.get_registry(), None);
+    assert_eq!(s.client.get_plan_contract(), None);
+fn get_by_subscriber_preserves_creation_order_with_interleaved_subscribers() {
+    let s = Setup::new();
+    let other_subscriber = Address::generate(&s.env);
+    s.mint(&other_subscriber, 1_000_000);
+
+    s.set_ledger(100);
+    let first = s.subscribe();
+
+    s.set_ledger(150);
+    // Interleaved: a different subscriber creates one in between.
+    s.client.subscribe(
+        &other_subscriber,
+        &s.merchant,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &CAP,
+        &0,
+        &0,
+    );
+
+    s.set_ledger(200);
+    let second = s.subscribe();
+
+    s.set_ledger(300);
+    let third = s.subscribe();
+
+    let mine = s.client.get_by_subscriber(&s.subscriber);
+    let ids: soroban_sdk::Vec<u64> = mine.iter().map(|sub| sub.id).collect();
+    assert_eq!(ids, soroban_sdk::vec![&s.env, first, second, third]);
+}
+
+#[test]
 fn remaining_cap_and_is_chargeable_track_the_lifecycle() {
     let s = Setup::new();
     let id = s.subscribe();
@@ -281,6 +318,15 @@ fn get_subscription_count_starts_at_zero_and_increments() {
     s.client.subscribe(
         &other_subscriber,
         &s.merchant,
+fn paginated_views_return_empty_for_zero_limit() {
+    let s = Setup::new();
+    let other_merchant = Address::generate(&s.env);
+
+    // Populate so the listings are non-empty at a positive limit.
+    let a = s.subscribe();
+    let b = s.client.subscribe(
+        &s.subscriber,
+        &other_merchant,
         &s.token.address,
         &AMOUNT,
         &INTERVAL,
@@ -347,4 +393,33 @@ fn get_subscription_count_by_merchant_counts_per_party() {
     assert_eq!(s.client.get_subscription_count_by_merchant(&s.merchant), 2);
 
     assert_eq!(s.client.get_subscription_count_by_merchant(&stranger), 0);
+
+    // Sanity check: a positive limit returns entries.
+    assert_eq!(s.client.get_by_subscriber_page(&s.subscriber, &0, &10).len(), 2);
+    assert_eq!(s.client.get_by_merchant_page(&s.merchant, &0, &10).len(), 1);
+    assert_eq!(
+        s.client.get_by_merchant_page(&other_merchant, &0, &10).len(),
+        1
+    );
+
+    // Policy: limit = 0 yields an empty vector, never an error.
+    assert_eq!(s.client.get_by_subscriber_page(&s.subscriber, &0, &0).len(), 0);
+    assert_eq!(s.client.get_by_merchant_page(&s.merchant, &0, &0).len(), 0);
+    assert_eq!(
+        s.client.get_by_merchant_page(&other_merchant, &0, &0).len(),
+        0
+    );
+
+    // The zero-limit result is empty regardless of the offset.
+    assert_eq!(s.client.get_by_subscriber_page(&s.subscriber, &1, &0).len(), 0);
+    assert_eq!(s.client.get_by_merchant_page(&s.merchant, &1, &0).len(), 0);
+
+    // A zero limit on an empty listing is likewise empty.
+    let stranger = Address::generate(&s.env);
+    assert_eq!(s.client.get_by_subscriber_page(&stranger, &0, &0).len(), 0);
+    assert_eq!(s.client.get_by_merchant_page(&stranger, &0, &0).len(), 0);
+
+    // The subscriptions are untouched by the zero-limit queries.
+    assert_eq!(s.client.get_by_subscriber(&s.subscriber).len(), 2);
+    let _ = (a, b);
 }
