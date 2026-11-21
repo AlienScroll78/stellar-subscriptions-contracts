@@ -82,6 +82,11 @@ impl SubscriptionContract {
         storage::read_registry(&env)
     }
 
+    /// Get the admin address.
+    pub fn get_admin(env: Env) -> Result<Address, Error> {
+        storage::read_admin(&env)
+    }
+
     /// Subscriber authorizes a subscription. This is where consent is granted
     /// and bounded: the merchant may later pull `amount_per_period` once per
     /// `interval_ledgers`, never more than `total_cap` in total.
