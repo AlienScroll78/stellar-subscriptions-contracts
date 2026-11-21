@@ -103,6 +103,7 @@ impl RegistryContract {
         subscription_id: u64,
         subscriber: Address,
         merchant: Address,
+        token: Address,
     ) -> Result<(), Error> {
         storage::read_writers(&env)?
             .subscription_contract
@@ -117,6 +118,7 @@ impl RegistryContract {
                 id: subscription_id,
                 subscriber: subscriber.clone(),
                 merchant: merchant.clone(),
+                token,
                 total_charged: 0,
                 status: STATUS_ACTIVE,
             },

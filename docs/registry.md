@@ -32,6 +32,7 @@ pub struct SubscriptionRecord {
     pub id: u64,
     pub subscriber: Address,
     pub merchant: Address,
+    pub token: Address,
     pub total_charged: i128,
     pub status: u32,                 // 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted
 }
@@ -57,7 +58,7 @@ Indexers can follow these events instead of polling `get_stats`.
 | `initialize(admin)` | admin | Once. |
 | `set_writers(admin, subscription_contract, plan_contract)` | admin | Once. |
 | `register_plan(plan_id)` | plan contract | Each plan counted once. |
-| `register_subscription(subscription_id, subscriber, merchant)` | subscription contract | Starts Active. |
+| `register_subscription(subscription_id, subscriber, merchant, token)` | subscription contract | Starts Active. `token` is stored on the record. |
 | `update_subscription(subscription_id, total_charged, status)` | subscription contract | See rules below. |
 | `get_stats() -> RegistryStats` | anyone | |
 | `get_subscription_record(subscription_id)` | anyone | |

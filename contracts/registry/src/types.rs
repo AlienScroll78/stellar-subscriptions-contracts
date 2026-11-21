@@ -56,6 +56,9 @@ pub struct SubscriptionRecord {
     pub subscriber: Address,
     /// Who may charge the subscription.
     pub merchant: Address,
+    /// The token the subscription is charged in, so indexers can filter by
+    /// payment token without loading the subscription contract's record.
+    pub token: Address,
     /// Total charged so far, as last reported.
     pub total_charged: i128,
     /// Last reported status (0 Active, 1 Paused, 2 Cancelled, 3 Exhausted).

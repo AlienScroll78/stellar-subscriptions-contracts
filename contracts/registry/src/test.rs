@@ -23,6 +23,7 @@ struct Setup {
     plans: Address,
     subscriber: Address,
     merchant: Address,
+    token: Address,
 }
 
 impl Setup {
@@ -37,6 +38,7 @@ impl Setup {
             plans: Address::generate(&env),
             subscriber: Address::generate(&env),
             merchant: Address::generate(&env),
+            token: Address::generate(&env),
             env,
             client,
             admin,
@@ -51,7 +53,7 @@ impl Setup {
 
     fn register(&self, id: u64) {
         self.client
-            .register_subscription(&id, &self.subscriber, &self.merchant);
+            .register_subscription(&id, &self.subscriber, &self.merchant, &self.token);
     }
 
     fn stats(&self) -> RegistryStats {
@@ -111,7 +113,7 @@ fn writes_before_configuration_are_rejected() {
     let s = Setup::unconfigured();
     expect_err(
         s.client
-            .try_register_subscription(&1, &s.subscriber, &s.merchant),
+            .try_register_subscription(&1, &s.subscriber, &s.merchant, &s.token),
         Error::NotConfigured,
     );
     expect_err(s.client.try_register_plan(&1), Error::NotConfigured);
@@ -132,6 +134,7 @@ fn register_subscription_counts_it_as_active() {
             id: 1,
             subscriber: s.subscriber.clone(),
             merchant: s.merchant.clone(),
+            token: s.token.clone(),
             total_charged: 0,
             status: STATUS_ACTIVE,
         }
@@ -144,7 +147,7 @@ fn registering_the_same_subscription_twice_is_rejected() {
     s.register(1);
     expect_err(
         s.client
-            .try_register_subscription(&1, &s.subscriber, &s.merchant),
+            .try_register_subscription(&1, &s.subscriber, &s.merchant, &s.token),
         Error::SubscriptionAlreadyRegistered,
     );
     assert_eq!(s.stats().total_subscriptions, 1);
@@ -165,7 +168,7 @@ fn only_the_subscription_contract_can_register_subscriptions() {
                 sub_invokes: &[],
             },
         }])
-        .try_register_subscription(&1, &s.subscriber, &s.merchant);
+        .try_register_subscription(&1, &s.subscriber, &s.merchant, &s.token);
     assert!(result.is_err());
     assert_eq!(s.stats().total_subscriptions, 0);
 }
@@ -463,4 +466,26 @@ fn stats_survive_seven_days_without_writes() {
     assert_eq!(s.stats().total_subscriptions, 2);
     assert_eq!(s.stats().active_subscriptions, 2);
     assert_eq!(s.stats().total_charged_volume, 300);
+}
+
+#[test]
+fn registration_stores_the_payment_token() {
+    let s = Setup::new();
+    s.register(1);
+    assert_eq!(s.client.get_subscription_record(&1).token, s.token);
+}
+
+#[test]
+fn records_keep_their_own_token_through_updates() {
+    let s = Setup::new();
+    let other_token = Address::generate(&s.env);
+    s.register(1);
+    s.client
+        .register_subscription(&2, &s.subscriber, &s.merchant, &other_token);
+
+    s.client.update_subscription(&1, &50, &STATUS_ACTIVE);
+    s.client.update_subscription(&2, &75, &STATUS_PAUSED);
+
+    assert_eq!(s.client.get_subscription_record(&1).token, s.token);
+    assert_eq!(s.client.get_subscription_record(&2).token, other_token);
 }
