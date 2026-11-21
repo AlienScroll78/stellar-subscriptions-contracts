@@ -337,6 +337,16 @@ fn create_plan_rejects_a_default_cap_below_one_period() {
 }
 
 #[test]
+fn a_default_cap_that_is_not_a_whole_multiple_is_accepted() {
+    // amount 10, cap 15: one charge fits, the 5 left over can never be charged.
+    let s = Setup::new();
+    let id = s
+        .client
+        .create_plan(&s.merchant, &s.name("Pro"), &s.token, &10, &INTERVAL, &15);
+    assert_eq!(s.client.get_plan(&id).default_cap, 15);
+}
+
+#[test]
 fn the_merchant_can_deactivate_their_plan() {
     let s = Setup::new();
     let id = s.create(&s.merchant, "Pro");

@@ -20,6 +20,8 @@ pub enum DataKey {
     Admin,
     /// Instance: contracts allowed to write.
     Writers,
+    /// Persistent: aggregate counters. Kept out of instance storage so it
+    /// has its own TTL and is not tied to the instance's 7-day bump.
     /// Persistent: aggregate counters. Kept out of instance storage so they
     /// are not archived together with the instance's 7-day TTL.
     Stats,
