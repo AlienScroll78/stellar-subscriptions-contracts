@@ -484,6 +484,21 @@ impl SubscriptionContract {
         Self::load_indexed(&env, &DataKey::ByMerchant(merchant))
     }
 
+    /// Lightweight analytics view of a subscription: its status and running
+    /// totals, without the cost of returning the full `Subscription`.
+    pub fn get_subscription_summary(
+        env: Env,
+        subscription_id: u64,
+    ) -> Result<SubscriptionSummary, Error> {
+        let sub = storage::read_sub(&env, subscription_id)?;
+        Ok(SubscriptionSummary {
+            id: sub.id,
+            status: sub.status,
+            total_charged: sub.total_charged,
+            next_charge_ledger: sub.next_charge_ledger,
+        })
+    }
+
     // ---- internal helpers ----
 
     fn require_admin(env: &Env, admin: &Address) -> Result<(), Error> {
