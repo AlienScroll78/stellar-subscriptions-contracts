@@ -53,12 +53,15 @@ Every function that reads or writes a persistent entry calls
   `push_id` (registry) bump the index entry they read or append to.
 
 This means the TTL clock restarts on the *entry*, not on a per-subscription
-basis across all its related entries: charging a subscription bumps its
-`Sub(id)` entry, but does not by itself bump that subscriber's `BySubscriber`
-index entry unless that index is also read or written in the same call.
-Entry point functions that touch several of these keys in one transaction
-(e.g. `charge`, which reads `Sub(id)` and may update the registry's
-`Record(id)`) bump all of the keys they go through.
+basis across all its related entries. `charge` is the one entry point that
+must bump more than its own record: it bumps `Sub(id)`, the subscriber's
+`BySubscriber` index and the merchant's `ByMerchant` index (via
+`touch_index`, which only extends an index that already exists), and the
+registry's `Record(id)` when linked. Without that, a subscriber who is charged
+for years but never calls the contract would let `BySubscriber` archive while
+its records stay live, breaking `get_by_subscriber`, `cancel` and
+`refresh_allowance`. Entry point functions that touch several of these keys
+in one transaction bump all of the keys they go through.
 
 Instance-level data is bumped the same way, via `bump_instance`, inside the
 contracts' entry points that touch instance storage.
