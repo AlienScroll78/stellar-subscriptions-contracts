@@ -131,6 +131,29 @@ pub fn push_index(env: &Env, key: DataKey, id: u64) {
     bump_persistent(env, &key);
 }
 
+/// Remove the first occurrence of `id` from the index stored at `key`.
+///
+/// Rebuilds the vector without the matching element and writes it back. If the
+/// id is not present the index is left unchanged (aside from the TTL bump from
+/// the read). Used by `cancel` to drop an id from `DataKey::ByPlan(plan_id)`.
+pub fn remove_index_value(env: &Env, key: &DataKey, id: u64) {
+    let ids = read_index(env, key);
+    let mut kept: Vec<u64> = Vec::new(env);
+    let mut removed = false;
+    for existing in ids.iter() {
+        if !removed && existing == id {
+            removed = true;
+            continue;
+        }
+        kept.push_back(existing);
+    }
+    if !removed {
+        return;
+    }
+    env.storage().persistent().set(key, &kept);
+    bump_persistent(env, key);
+}
+
 #[cfg(test)]
 mod golden {
     // Storage-layout golden for `DataKey`.
@@ -185,6 +208,7 @@ mod golden {
             ("BySubscriber", DataKey::BySubscriber(addr.clone())),
             ("ByMerchant", DataKey::ByMerchant(addr.clone())),
             ("ByMerchant", DataKey::ByMerchant(addr)),
+            ("ByPlan", DataKey::ByPlan(7)),
             ("ByPlan", DataKey::ByPlan(42)),
             ("PlanContract", DataKey::PlanContract),
             ("Registry", DataKey::Registry),
