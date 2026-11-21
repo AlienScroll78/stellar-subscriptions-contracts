@@ -21,6 +21,11 @@ pub struct Subscribed {
     pub interval_ledgers: u32,
     pub total_cap: i128,
     pub plan_id: u64,
+    /// Number of ledgers in the trial period granted at subscription time.
+    pub trial_ledgers: u32,
+    /// Ledger at which the subscription expires.
+    /// Ledger after which the subscription can no longer be charged.
+    pub expires_at: u32,
 }
 
 /// A merchant pulled one period's charge.
@@ -31,6 +36,7 @@ pub struct Charged {
     pub subscription_id: u64,
     #[topic]
     pub merchant: Address,
+    pub token: Address,
     pub amount: i128,
     pub total_charged: i128,
     pub next_charge_ledger: u32,
@@ -100,4 +106,18 @@ pub struct MerchantEnded {
     #[topic]
     pub merchant: Address,
     pub total_charged: i128,
+}
+
+/// A plan's description was set or updated.
+///
+/// Mirrors the plan contract's event so indexers can decode it from either
+/// contract. `description` is `None` when the description was cleared.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanDescriptionUpdated {
+    #[topic]
+    pub plan_id: u64,
+    #[topic]
+    pub merchant: Address,
+    pub description: Option<String>,
 }

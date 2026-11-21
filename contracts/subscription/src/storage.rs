@@ -32,6 +32,11 @@ pub enum DataKey {
     Registry,
 }
 
+// Note: `Plan.subscriber_count` is owned by the plan contract, not this one.
+// The subscription contract only triggers the increment (via the plan
+// contract client) on each `subscribe`; it does not persist a local counter,
+// so no `DataKey` variant is needed here.
+
 pub fn read_plan_contract(env: &Env) -> Option<Address> {
     env.storage().instance().get(&DataKey::PlanContract)
 }
@@ -126,6 +131,29 @@ pub fn push_index(env: &Env, key: DataKey, id: u64) {
     bump_persistent(env, &key);
 }
 
+/// Remove the first occurrence of `id` from the index stored at `key`.
+///
+/// Rebuilds the vector without the matching element and writes it back. If the
+/// id is not present the index is left unchanged (aside from the TTL bump from
+/// the read). Used by `cancel` to drop an id from `DataKey::ByPlan(plan_id)`.
+pub fn remove_index_value(env: &Env, key: &DataKey, id: u64) {
+    let ids = read_index(env, key);
+    let mut kept: Vec<u64> = Vec::new(env);
+    let mut removed = false;
+    for existing in ids.iter() {
+        if !removed && existing == id {
+            removed = true;
+            continue;
+        }
+        kept.push_back(existing);
+    }
+    if !removed {
+        return;
+    }
+    env.storage().persistent().set(key, &kept);
+    bump_persistent(env, key);
+}
+
 #[cfg(test)]
 mod golden {
     // Storage-layout golden for `DataKey`.
@@ -178,8 +206,11 @@ mod golden {
             ("NextId", DataKey::NextId),
             ("Sub", DataKey::Sub(7)),
             ("BySubscriber", DataKey::BySubscriber(addr.clone())),
+            ("ByMerchant", DataKey::ByMerchant(addr.clone())),
             ("ByMerchant", DataKey::ByMerchant(addr)),
             ("ByPlan", DataKey::ByPlan(99)),
+            ("ByPlan", DataKey::ByPlan(7)),
+            ("ByPlan", DataKey::ByPlan(42)),
             ("PlanContract", DataKey::PlanContract),
             ("Registry", DataKey::Registry),
         ];
@@ -219,6 +250,13 @@ mod golden {
                     assert!(
                         matches!(vec[1], ScVal::Address(_)),
                         "{name} payload must be an Address"
+                    );
+                }
+                DataKey::ByPlan(_) => {
+                    assert_eq!(vec.len(), 2, "ByPlan must carry one value");
+                    assert!(
+                        matches!(vec[1], ScVal::U64(_)),
+                        "ByPlan payload must be U64"
                     );
                 }
             }
