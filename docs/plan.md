@@ -44,12 +44,19 @@ counter only — it is not decremented on cancellation or expiry.
 |---|---|---|
 | `initialize(admin)` | admin | Once. |
 | `set_registry(admin, registry)` | admin | Once, before the first plan. |
+| `create_plan(merchant, name, token, amount_per_period, interval_ledgers, default_cap) -> u64` | **merchant** | Active immediately. Counted in the registry if linked. |
+| `deactivate_plan(merchant, plan_id)` | **the plan's merchant** | Stops new subscriptions; reversible via `reactivate_plan`. |
+| `reactivate_plan(merchant, plan_id)` | **the plan's merchant** | Re-enables a deactivated plan, keeping its ID. |
 | `create_plan(merchant, name, token, amount_per_period, interval_ledgers, default_cap, description) -> u64` | **merchant** | Active immediately. `description` is `Option<String>`; if `Some`, it must be 1..=`MAX_DESCRIPTION_LEN` bytes. Counted in the registry if linked. |
 | `set_plan_description(merchant, plan_id, description)` | **the plan's merchant** | Replaces the description (`None` clears it). Emits `plan_description_updated`. Same byte limit as `create_plan`. |
 | `deactivate_plan(merchant, plan_id)` | **the plan's merchant** | Irreversible. |
 | `get_plan(plan_id) -> Plan` | none | |
 | `get_plan_subscriber_count(plan_id) -> u64` | none | Returns `Plan.subscriber_count`; 0 for unknown plans. |
 | `get_plans_by_merchant(merchant) -> Vec<Plan>` | none | Active and inactive, oldest first. |
+| `get_plans_by_merchant_page(merchant, start, limit) -> Vec<Plan>` | none | Paginated variant of `get_plans_by_merchant`. |
+| `get_active_plans_by_merchant(merchant) -> Vec<Plan>` | none | Only active plans, oldest first. |
+| `get_active_plans() -> Vec<Plan>` | none | Oldest first. **Deprecated** in favour of `get_active_plans_page`. |
+| `get_active_plans_page(start, limit) -> Vec<Plan>` | none | Paginated active plans, oldest first. |
 | `get_plans_by_token(token, offset, limit) -> Vec<Plan>` | none | Oldest first. If `offset >= len`, returns an **empty vec** (not an error); see below. |
 | `get_active_plans() -> Vec<Plan>` | none | Oldest first. |
 | `get_registry() -> Option<Address>` | none | |
@@ -66,6 +73,8 @@ simply stop paging when an empty page is returned.
 ## What deactivation does and does not do
 
 - New `subscribe` calls naming the plan fail with `PlanInactive`.
+- `reactivate_plan` restores `active = true` on the same plan ID, so
+  subscriptions can resume without creating a new plan.
 - Existing subscriptions keep charging exactly as authorized. The subscriber
   consented to specific terms and a cap; the merchant retiring a plan does not
   change that consent. A merchant who wants to stop billing simply stops
@@ -81,6 +90,7 @@ in the subscription crate's integration tests.
 | `plan_created` | plan_id, merchant | name, token, amount_per_period, interval_ledgers, default_cap, description |
 | `plan_description_updated` | plan_id, merchant | description |
 | `plan_deactivated` | plan_id, merchant | — |
+| `plan_reactivated` | plan_id, merchant | — |
 
 ## Errors
 
@@ -94,17 +104,24 @@ in the subscription crate's integration tests.
 | 6 | `InvalidInterval` | `interval_ledgers == 0`. |
 | 7 | `InvalidCap` | `default_cap < amount_per_period`. |
 | 8 | `PlanNotFound` | |
-| 9 | `NotPlanMerchant` | Only the creating merchant may deactivate. |
+| 9 | `NotPlanMerchant` | Only the creating merchant may deactivate or reactivate. |
 | 10 | `PlanAlreadyInactive` | |
 | 11 | `Overflow` | |
 | 12 | `AlreadyConfigured` | Registry already linked, or a plan already exists. |
 | 13 | `RegistryUpdateFailed` | The linked registry refused to count the plan. |
+| 14 | `PlanAlreadyActive` | `reactivate_plan` called on an active plan. |
+| 15 | `InvalidPageSize` | `limit` is 0 or greater than `MAX_PAGE_SIZE`. |
 | 15 | `InvalidDescription` | Description is empty or longer than `MAX_DESCRIPTION_LEN` (256) bytes. |
 
 Codes are append-only. (14 is reserved.)
 
 ## Limits
 
+`get_active_plans` walks every plan ever created and will exceed the
+per-transaction instruction budget for large catalogues. Prefer the paginated
+queries (`get_active_plans_page`, `get_plans_by_merchant_page`) with a `limit`
+of at most `MAX_PAGE_SIZE`. For bulk listings, serve them from an indexer
+reading `plan_created` / `plan_deactivated` / `plan_reactivated` events.
 `get_active_plans` walks every plan ever created. For large catalogues, serve
 listings from an indexer reading `plan_created` / `plan_deactivated` events.
 

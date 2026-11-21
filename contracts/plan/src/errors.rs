@@ -39,6 +39,9 @@ pub enum Error {
     RegistryUpdateFailed = 13,
     /// `page_size` must be between 1 and 1000.
     InvalidPageSize = 14,
+    /// `reactivate_plan` was called on a plan that is already active.
+    PlanAlreadyActive = 15,
+}
     /// `description` must be at most 256 bytes.
     InvalidDescription = 15,
 }

@@ -260,6 +260,11 @@ Emitted when a merchant publishes a new billing plan.
 | topic 1 | plan_id | `u64` | e.g. `1` |
 | topic 2 | merchant | `Address` | merchant's Stellar address |
 | data 0 | name | `String` | plan display name (1–64 bytes) |
+| data 1 | token | `Address` | token contract address |
+| data 2 | amount_per_period | `i128` | e.g. `10000000` |
+| data 3 | interval_ledgers | `u32` | e.g. `720` |
+| data 4 | default_cap | `i128` | suggested cap (>= amount_per_period) |
+| data 5 | created_at | `u32` | ledger sequence at which the plan was created |
 | data 1 | description | `Option<String>` | optional description (0–256 bytes), `null` if not set |
 | data 2 | token | `Address` | token contract address |
 | data 3 | amount_per_period | `i128` | e.g. `10000000` |
@@ -287,7 +292,8 @@ plan is registered with the registry.
     "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
     10000000,
     720,
-    120000000
+    120000000,
+    4692990
   ]
 }
 ```
@@ -330,7 +336,8 @@ after the plan is updated in storage.
 
 ### `plan_deactivated`
 
-Emitted when a merchant deactivates a plan. Deactivation is irreversible.
+Emitted when a merchant deactivates a plan. A deactivated plan cannot accept
+new subscriptions until it is reactivated with `reactivate_plan()`.
 
 | Position | Kind | Type | Value |
 |---|---|---|---|
@@ -351,6 +358,39 @@ No data fields.
   "contractId": "CDKFRKPA2EIYMW2GX2FY4ZFQ2VAFS5UZD5BHAZLCIGRA7N24N2DFAYN3",
   "topics": [
     "plan_deactivated",
+    1,
+    "GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+  ],
+  "data": []
+}
+```
+
+---
+
+### `plan_reactivated`
+
+Emitted when a merchant reactivates a previously deactivated plan. The plan
+keeps its original `plan_id` and can accept new subscriptions again.
+
+| Position | Kind | Type | Value |
+|---|---|---|---|
+| topic 0 | event name | `Symbol` | `"plan_reactivated"` |
+| topic 1 | plan_id | `u64` | e.g. `1` |
+| topic 2 | merchant | `Address` | merchant's Stellar address |
+
+No data fields.
+
+**When emitted:** at the end of a successful `reactivate_plan()` call.
+
+**Decoded example:**
+
+```json
+{
+  "type": "contract",
+  "ledger": 4695100,
+  "contractId": "CDKFRKPA2EIYMW2GX2FY4ZFQ2VAFS5UZD5BHAZLCIGRA7N24N2DFAYN3",
+  "topics": [
+    "plan_reactivated",
     1,
     "GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
   ],
