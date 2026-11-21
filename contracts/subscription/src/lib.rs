@@ -475,11 +475,19 @@ impl SubscriptionContract {
     }
 
     /// Every subscription a subscriber has created, oldest first.
+    ///
+    /// Fails with `ListTooLarge` instead of loading more than
+    /// `MAX_LIST_SIZE` subscriptions, so a subscriber with a very large
+    /// history cannot push a caller over the transaction budget.
     pub fn get_by_subscriber(env: Env, subscriber: Address) -> Result<Vec<Subscription>, Error> {
         Self::load_indexed(&env, &DataKey::BySubscriber(subscriber))
     }
 
     /// Every subscription payable to a merchant, oldest first.
+    ///
+    /// Fails with `ListTooLarge` instead of loading more than
+    /// `MAX_LIST_SIZE` subscriptions, so a merchant with a very large
+    /// history cannot push a caller over the transaction budget.
     pub fn get_by_merchant(env: Env, merchant: Address) -> Result<Vec<Subscription>, Error> {
         Self::load_indexed(&env, &DataKey::ByMerchant(merchant))
     }
@@ -571,8 +579,12 @@ impl SubscriptionContract {
     }
 
     fn load_indexed(env: &Env, key: &DataKey) -> Result<Vec<Subscription>, Error> {
+        let ids = storage::read_index(env, key);
+        if ids.len() > MAX_LIST_SIZE {
+            return Err(Error::ListTooLarge);
+        }
         let mut out = Vec::new(env);
-        for id in storage::read_index(env, key).iter() {
+        for id in ids.iter() {
             out.push_back(storage::read_sub(env, id)?);
         }
         Ok(out)

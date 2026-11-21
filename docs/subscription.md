@@ -75,6 +75,13 @@ SubscriptionSummary {
 This avoids the instruction cost of loading and returning fields (token,
 amounts, ledgers, plan id) the caller does not need.
 
+### List size limit
+
+`get_by_subscriber` and `get_by_merchant` return `Error::ListTooLarge` if
+that party's index holds more than `MAX_LIST_SIZE` (200) subscriptions,
+instead of attempting to load and return an unbounded list. See
+`SECURITY.md` for the full resource-exhaustion discussion.
+
 The admin **cannot** charge, cancel, pause or resume anything, and cannot
 change a link once set.
 
