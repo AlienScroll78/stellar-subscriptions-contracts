@@ -371,6 +371,47 @@ fn merchant_stats_are_kept_per_merchant() {
 }
 
 #[test]
+fn active_pages_walk_the_whole_index() {
+    let s = Setup::new();
+    for id in 1..=7u64 {
+        s.register(id);
+    }
+    s.client.update_subscription(&2, &0, &STATUS_PAUSED);
+    s.client.update_subscription(&5, &0, &STATUS_CANCELLED);
+
+    let mut walked = std::vec::Vec::new();
+    for start in (0..7u32).step_by(3) {
+        walked.extend(ids(s.client.get_active_subscriptions_page(&start, &3)));
+    }
+    assert_eq!(walked, [1, 3, 4, 6, 7]);
+    assert_eq!(walked, ids(s.client.get_active_subscriptions()));
+}
+
+#[test]
+fn active_page_limit_boundaries() {
+    let s = Setup::new();
+    s.register(1);
+    assert_eq!(ids(s.client.get_active_subscriptions_page(&0, &1)), [1]);
+    assert_eq!(ids(s.client.get_active_subscriptions_page(&0, &1000)), [1]);
+    expect_err(
+        s.client.try_get_active_subscriptions_page(&0, &0),
+        Error::PageSizeTooLarge,
+    );
+    expect_err(
+        s.client.try_get_active_subscriptions_page(&0, &1001),
+        Error::PageSizeTooLarge,
+    );
+}
+
+#[test]
+fn active_page_past_the_end_is_empty() {
+    let s = Setup::new();
+    s.register(1);
+    assert!(ids(s.client.get_active_subscriptions_page(&5, &10)).is_empty());
+    assert!(ids(s.client.get_active_subscriptions_page(&u32::MAX, &1000)).is_empty());
+}
+
+#[test]
 fn version_is_1() {
     let s = Setup::new();
     assert_eq!(s.client.version(), 1);

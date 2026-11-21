@@ -26,6 +26,9 @@ use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 /// Version of this contract, bumped on each incompatible change.
 pub const VERSION: u32 = 1;
 
+/// Largest page `get_active_subscriptions_page` will return.
+const MAX_PAGE_SIZE: u32 = 1000;
+
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
 #[allow(missing_docs)]
@@ -246,7 +249,42 @@ impl RegistryContract {
         storage::read_all_ids(&env)
     }
 
+    /// One page of Active subscription ids.
+    ///
+    /// Looks at the registered ids in positions `start..start + limit` (oldest
+    /// first) and returns those whose last reported status is Active. Walk
+    /// the whole index by calling again with `start += limit` until `start`
+    /// reaches the length reported by `get_all_subscriptions`.
+    ///
+    /// Each call reads at most `limit` records, so its cost is bounded.
+    /// `limit` must be between 1 and 1000; anything else returns
+    /// `PageSizeTooLarge`. A `start` past the end returns an empty page.
+    pub fn get_active_subscriptions_page(
+        env: Env,
+        start: u32,
+        limit: u32,
+    ) -> Result<Vec<u64>, Error> {
+        if limit == 0 || limit > MAX_PAGE_SIZE {
+            return Err(Error::PageSizeTooLarge);
+        }
+        let ids = storage::read_all_ids(&env);
+        let end = start.saturating_add(limit).min(ids.len());
+        let mut out = Vec::new(&env);
+        for index in start..end {
+            if let Some(id) = ids.get(index) {
+                if storage::read_record(&env, id)?.status == STATUS_ACTIVE {
+                    out.push_back(id);
+                }
+            }
+        }
+        Ok(out)
+    }
+
     /// Ids of subscriptions whose last reported status is Active.
+    ///
+    /// Costs one record read per registered subscription, so it grows with
+    /// the whole index and can exceed the instruction budget at scale. Prefer
+    /// `get_active_subscriptions_page`.
     pub fn get_active_subscriptions(env: Env) -> Result<Vec<u64>, Error> {
         let mut out = Vec::new(&env);
         for id in storage::read_all_ids(&env).iter() {
