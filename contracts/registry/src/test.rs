@@ -3,7 +3,7 @@ extern crate std;
 use core::fmt::Debug;
 
 use soroban_sdk::{
-    testutils::{Address as _, MockAuth, MockAuthInvoke},
+    testutils::{storage::Persistent as _, Address as _, Ledger, MockAuth, MockAuthInvoke},
     Address, Env, IntoVal,
 };
 
@@ -409,6 +409,41 @@ fn active_page_past_the_end_is_empty() {
     s.register(1);
     assert!(ids(s.client.get_active_subscriptions_page(&5, &10)).is_empty());
     assert!(ids(s.client.get_active_subscriptions_page(&u32::MAX, &1000)).is_empty());
+}
+
+#[test]
+fn stats_are_still_correct_after_seven_days_without_a_write() {
+    let s = Setup::new();
+    s.register(1);
+    s.client.update_subscription(&1, &100, &STATUS_ACTIVE);
+    s.client.register_plan(&1);
+
+    // One week of ledgers, about 5 seconds each, with no writes in between.
+    let now = s.env.ledger().sequence();
+    s.env.ledger().set_sequence_number(now + 7 * 17_280 + 1);
+
+    assert_eq!(
+        s.stats(),
+        RegistryStats {
+            total_plans: 1,
+            total_subscriptions: 1,
+            active_subscriptions: 1,
+            total_charged_volume: 100,
+        }
+    );
+}
+
+#[test]
+fn stats_live_in_persistent_storage_with_a_week_of_ttl() {
+    let s = Setup::new();
+    s.register(1);
+    let ttl = s.env.as_contract(&s.client.address, || {
+        s.env
+            .storage()
+            .persistent()
+            .get_ttl(&crate::storage::DataKey::Stats)
+    });
+    assert!(ttl >= 7 * 17_280, "stats TTL is only {ttl} ledgers");
 }
 
 #[test]
