@@ -216,6 +216,10 @@ impl SubscriptionContract {
 
         let id = storage::take_next_id(env)?;
         let now = env.ledger().sequence();
+        let trial_ledgers = 0u32;
+        let expires_at = now.checked_add(trial_ledgers).ok_or(Error::Overflow)?;
+
+        let id = storage::take_next_id(&env)?;
         let sub = Subscription {
             id,
             subscriber,
@@ -227,7 +231,7 @@ impl SubscriptionContract {
             total_charged: 0,
             start_ledger: now,
             last_charge_ledger: 0,
-            next_charge_ledger: now,
+            next_charge_ledger: expires_at,
             status: SubStatus::Active,
             plan_id,
             expires_at,
@@ -277,6 +281,7 @@ impl SubscriptionContract {
             interval_ledgers,
             total_cap,
             plan_id,
+            trial_ledgers,
             expires_at,
         }
         .publish(env);
@@ -576,6 +581,28 @@ impl SubscriptionContract {
         Self::load_indexed(&env, &DataKey::ByMerchant(merchant))
     }
 
+    /// Page of a subscriber's subscriptions, oldest first.
+    ///
+    /// A `limit` of 0 returns an empty vector.
+    pub fn get_by_subscriber_page(
+        env: Env,
+        subscriber: Address,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Subscription>, Error> {
+        Self::load_indexed_page(&env, &DataKey::BySubscriber(subscriber), offset, limit)
+    }
+
+    /// Page of a merchant's subscriptions, oldest first.
+    ///
+    /// A `limit` of 0 returns an empty vector.
+    pub fn get_by_merchant_page(
+        env: Env,
+        merchant: Address,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Subscription>, Error> {
+        Self::load_indexed_page(&env, &DataKey::ByMerchant(merchant), offset, limit)
     /// Number of subscriptions created from a plan. Returns 0 for plan_id=0
     /// (ad-hoc subscriptions are never indexed by plan).
     pub fn count_by_plan(env: Env, plan_id: u64) -> u32 {
@@ -712,6 +739,20 @@ impl SubscriptionContract {
         Ok(out)
     }
 
+    /// Paginated variant of `load_indexed`. A `limit` of 0 returns an empty
+    /// vector, consistently across every paginated view.
+    fn load_indexed_page(
+        env: &Env,
+        key: &DataKey,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Subscription>, Error> {
+        let mut out = Vec::new(env);
+        if limit == 0 {
+            return Ok(out);
+        }
+        for id in storage::read_index(env, key).iter().skip(offset).take(limit) {
+            out.push_back(storage::read_sub(env, id)?);
     fn load_indexed_page(
         env: &Env,
         key: &DataKey,

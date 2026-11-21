@@ -21,6 +21,9 @@ pub struct Subscribed {
     pub interval_ledgers: u32,
     pub total_cap: i128,
     pub plan_id: u64,
+    /// Number of ledgers in the trial period granted at subscription time.
+    pub trial_ledgers: u32,
+    /// Ledger at which the subscription expires.
     /// Ledger after which the subscription can no longer be charged.
     pub expires_at: u32,
 }

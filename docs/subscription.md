@@ -177,6 +177,7 @@ succeeds and reports the outcome in the event's `registry_updated` flag.
 
 | Event | Topics | Data |
 |---|---|---|
+| `subscribed` | subscription_id, subscriber, merchant | token, amount_per_period, interval_ledgers, total_cap, plan_id, trial_ledgers, expires_at |
 | `subscribed` | subscription_id, subscriber, merchant | token, amount_per_period, interval_ledgers, total_cap, plan_id, expires_at |
 | `charged` | subscription_id, merchant | token, amount, total_charged, next_charge_ledger, exhausted |
 | `cancelled` | subscription_id, subscriber | total_charged, unused_cap, allowance_updated, registry_updated |
@@ -231,6 +232,19 @@ Codes are append-only.
 - **Token** is chosen by the subscriber and merchant. A misbehaving token can
   make charges fail, but cannot make the contract record a charge that did not
   transfer.
+- `get_by_subscriber` / `get_by_merchant` and the allowance recomputation
+  iterate over every subscription that party has ever had. Parties with very
+  large numbers of subscriptions should be served by an off-chain indexer
+  reading the events.
+
+## Pagination
+
+The paginated views (`get_by_subscriber_page`, `get_by_merchant_page`) take a
+`limit: u32`. A `limit` of `0` is valid and means "no entries": the view
+returns an empty vector rather than an error. This policy is applied
+consistently across every paginated view, so callers can always treat
+`limit = 0` as a cheap way to probe a view without fetching data. A non-zero
+`limit` returns at most that many entries, starting at `offset`.
 - `get_by_subscriber` / `get_by_merchant` / `get_by_plan` and the allowance
   recomputation iterate over every subscription that party or plan has ever
   had. Parties or plans with very large numbers of subscriptions should be
