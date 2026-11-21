@@ -61,4 +61,8 @@ pub enum Error {
     BatchTooLarge = 27,
     /// The merchant ended the subscription. Final: no further charges, ever.
     SubscriptionMerchantEnded = 28,
+    /// EXPIRY: the current ledger is at or past `expires_at`.
+    SubscriptionExpired = 28,
+    /// `expires_at` must be zero (no expiry) or in the future.
+    InvalidExpiry = 29,
 }
