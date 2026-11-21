@@ -12,16 +12,27 @@
 //! parties.
 
 mod errors;
+mod events;
 mod storage;
 mod types;
+
+/// Version of the registry's interface.
+pub const VERSION: u32 = 1;
+
+/// Largest `limit` accepted by the paginated listing functions.
+pub const MAX_PAGE_SIZE: u32 = 100;
 
 pub use errors::Error;
 pub use types::{
     MerchantStats, RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED,
     STATUS_EXHAUSTED, STATUS_PAUSED,
+    RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
+    STATUS_MERCHANT_ENDED, STATUS_PAUSED,
 };
 
-use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Env, Event, Vec};
+
+use crate::events::{SubscriptionRegistered, SubscriptionUpdated};
 
 /// Version of this contract, bumped on each incompatible change.
 pub const VERSION: u32 = 1;
@@ -105,6 +116,7 @@ impl RegistryContract {
         subscription_id: u64,
         subscriber: Address,
         merchant: Address,
+        token: Address,
     ) -> Result<(), Error> {
         storage::read_writers(&env)?
             .subscription_contract
@@ -119,6 +131,9 @@ impl RegistryContract {
                 id: subscription_id,
                 subscriber,
                 merchant: merchant.clone(),
+                subscriber: subscriber.clone(),
+                merchant: merchant.clone(),
+                token,
                 total_charged: 0,
                 status: STATUS_ACTIVE,
             },
@@ -147,6 +162,12 @@ impl RegistryContract {
             .ok_or(Error::Overflow)?;
         storage::write_merchant_stats(&env, &merchant, &merchant_stats);
         storage::bump_instance(&env);
+        SubscriptionRegistered {
+            subscription_id,
+            subscriber,
+            merchant,
+        }
+        .publish(&env);
         Ok(())
     }
 
@@ -165,7 +186,7 @@ impl RegistryContract {
         storage::read_writers(&env)?
             .subscription_contract
             .require_auth();
-        if status > STATUS_EXHAUSTED {
+        if status > STATUS_MERCHANT_ENDED {
             return Err(Error::InvalidStatus);
         }
         let mut record = storage::read_record(&env, subscription_id)?;
@@ -222,7 +243,18 @@ impl RegistryContract {
         storage::write_stats(&env, &stats);
         storage::write_merchant_stats(&env, &record.merchant, &merchant_stats);
         storage::bump_instance(&env);
+        SubscriptionUpdated {
+            subscription_id,
+            total_charged,
+            status,
+        }
+        .publish(&env);
         Ok(())
+    }
+
+    /// Version of this contract.
+    pub fn version() -> u32 {
+        VERSION
     }
 
     /// Current aggregate stats across every indexed plan and subscription.
@@ -245,6 +277,11 @@ impl RegistryContract {
     }
 
     /// Every registered subscription id, oldest first.
+    ///
+    /// **Deprecated in favour of [`Self::get_all_subscriptions_page`].** This
+    /// reads the whole index in one call, so its cost is O(n) in the number
+    /// of subscriptions ever registered and eventually exceeds the
+    /// transaction budget. Use the paginated function for any listing.
     pub fn get_all_subscriptions(env: Env) -> Vec<u64> {
         storage::read_all_ids(&env)
     }
@@ -260,11 +297,18 @@ impl RegistryContract {
     /// `limit` must be between 1 and 1000; anything else returns
     /// `PageSizeTooLarge`. A `start` past the end returns an empty page.
     pub fn get_active_subscriptions_page(
+    /// One page of registered subscription ids, oldest first.
+    ///
+    /// Returns at most `limit` ids starting at index `start`. A `start` at or
+    /// past the end returns an empty page. `limit` must not exceed
+    /// [`MAX_PAGE_SIZE`], otherwise `PageSizeTooLarge` is returned.
+    pub fn get_all_subscriptions_page(
         env: Env,
         start: u32,
         limit: u32,
     ) -> Result<Vec<u64>, Error> {
         if limit == 0 || limit > MAX_PAGE_SIZE {
+        if limit > MAX_PAGE_SIZE {
             return Err(Error::PageSizeTooLarge);
         }
         let ids = storage::read_all_ids(&env);
@@ -276,6 +320,10 @@ impl RegistryContract {
                     out.push_back(id);
                 }
             }
+        let mut index = start;
+        while index < end {
+            out.push_back(ids.get_unchecked(index));
+            index += 1;
         }
         Ok(out)
     }
