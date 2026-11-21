@@ -100,6 +100,7 @@ impl SubscriptionContract {
         interval_ledgers: u32,
         total_cap: i128,
         plan_id: u64,
+        trial_ledgers: u32,
     ) -> Result<u64, Error> {
         storage::read_admin(&env)?;
         subscriber.require_auth();
@@ -261,11 +262,16 @@ impl SubscriptionContract {
 
     /// Charge several of the merchant's subscriptions in one transaction.
     ///
-    /// Every id goes through the full `charge` checks (CAP, INTERVAL and
-    /// REVOCATION). The batch is all or nothing: the first id that fails returns
-    /// its error and the whole call is rolled back, so nothing is charged. A
-    /// repeated id fails on its second charge, because the interval has not
-    /// elapsed. At most `MAX_BATCH` ids are accepted.
+    /// Every id goes through the full `charge` checks (REVOCATION, INTERVAL,
+    /// and CAP) in order. The batch is **all or nothing**: if any id fails,
+    /// the error is returned immediately and the entire transaction is rolled
+    /// back — no subscription is charged and no funds move.
+    ///
+    /// A repeated id demonstrates this clearly: the first occurrence charges
+    /// and advances `next_charge_ledger`; the second then fails with
+    /// [`Error::IntervalNotElapsed`], rolling back both. At most [`MAX_BATCH`]
+    /// ids are accepted; passing more returns [`Error::BatchTooLarge`] before
+    /// any charge is attempted. Exactly [`MAX_BATCH`] ids is valid.
     pub fn batch_charge(env: Env, merchant: Address, ids: Vec<u64>) -> Result<(), Error> {
         if ids.len() > MAX_BATCH {
             return Err(Error::BatchTooLarge);
