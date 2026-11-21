@@ -64,6 +64,7 @@ impl MockRegistry {
         subscription_id: u64,
         _subscriber: Address,
         _merchant: Address,
+        _token: Address,
     ) {
         // The real registry requires the subscription contract's auth; satisfy
         // that expectation so mock_all_auths covers it.

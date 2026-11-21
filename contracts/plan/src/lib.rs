@@ -222,6 +222,7 @@ impl PlanContract {
             subscriber_count: 0,
             active: true,
             created_at: env.ledger().sequence(),
+            description: None,
             description: Option::None,
         };
         storage::write_plan(&env, &plan);
