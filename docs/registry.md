@@ -72,7 +72,7 @@ index can never reach a state the subscription contract could not:
 
 - `status` must be 0–4 (`InvalidStatus`);
 - `total_charged` never decreases (`ChargedDecreased`);
-- a Cancelled or Exhausted record never changes again (`AlreadyFinal`);
+- a Cancelled, Exhausted or MerchantEnded record never changes again (`AlreadyFinal`);
 - `total_charged_volume` grows by exactly the increase, with checked
   arithmetic;
 - `active_subscriptions` moves only on a real transition into or out of

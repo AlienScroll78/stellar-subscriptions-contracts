@@ -273,6 +273,20 @@ fn merchant_ended_is_an_accepted_status() {
 }
 
 #[test]
+fn merchant_ended_subscriptions_are_final() {
+    let s = Setup::new();
+    s.register(1);
+    s.client
+        .update_subscription(&1, &100, &STATUS_MERCHANT_ENDED);
+    expect_err(
+        s.client.try_update_subscription(&1, &500, &STATUS_ACTIVE),
+        Error::AlreadyFinal,
+    );
+    assert_eq!(s.client.get_subscription_record(&1).total_charged, 100);
+    assert_eq!(s.stats().total_charged_volume, 100);
+}
+
+#[test]
 fn unknown_status_codes_are_rejected() {
     let s = Setup::new();
     s.register(1);
