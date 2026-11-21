@@ -23,6 +23,9 @@ pub use types::{
 
 use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
+/// Version of this contract.
+pub const VERSION: u32 = 1;
+
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
 #[allow(missing_docs)]
@@ -196,6 +199,11 @@ impl RegistryContract {
         subscription_id: u64,
     ) -> Result<SubscriptionRecord, Error> {
         storage::read_record(&env, subscription_id)
+    }
+
+    /// Version of this contract.
+    pub fn version() -> u32 {
+        VERSION
     }
 
     /// Every registered subscription id, oldest first.
