@@ -130,6 +130,9 @@ impl SubscriptionContract {
 
         let id = storage::take_next_id(&env)?;
         let now = env.ledger().sequence();
+        let next_charge_ledger = now
+            .checked_add(trial_ledgers)
+            .ok_or(Error::Overflow)?;
         let sub = Subscription {
             id,
             subscriber,
@@ -141,13 +144,17 @@ impl SubscriptionContract {
             total_charged: 0,
             start_ledger: now,
             last_charge_ledger: 0,
-            next_charge_ledger: now,
+            next_charge_ledger,
             status: SubStatus::Active,
             plan_id,
+            trial_ledgers,
         };
         storage::write_sub(&env, &sub);
         storage::push_index(&env, DataKey::BySubscriber(sub.subscriber.clone()), id);
         storage::push_index(&env, DataKey::ByMerchant(sub.merchant.clone()), id);
+        if plan_id != 0 {
+            storage::push_index(&env, DataKey::ByPlan(plan_id), id);
+        }
 
         // After the write, so the new subscription's cap is included.
         allowance::sync(&env, &sub.subscriber, &sub.token)?;
