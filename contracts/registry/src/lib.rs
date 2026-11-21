@@ -25,6 +25,7 @@ pub const MAX_PAGE_SIZE: u32 = 100;
 pub use errors::Error;
 pub use types::{
     MerchantStats, RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED,
+    STATUS_EXHAUSTED, STATUS_PAUSED,
     STATUS_EXHAUSTED, STATUS_MERCHANT_ENDED, STATUS_PAUSED,
     STATUS_EXHAUSTED, STATUS_PAUSED,
     RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
@@ -46,6 +47,9 @@ pub const VERSION: u32 = 1;
 
 /// Version of this contract.
 pub const VERSION: u32 = 1;
+
+/// Largest page `get_sub_records_by_status` will return.
+pub const MAX_PAGE_SIZE: u32 = 100;
 
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
@@ -151,6 +155,7 @@ impl RegistryContract {
             },
         );
         storage::push_id(&env, subscription_id);
+        storage::push_status_id(&env, STATUS_ACTIVE, subscription_id);
         storage::push_merchant_id(&env, &merchant, subscription_id);
 
         let mut stats = storage::read_stats(&env);
@@ -236,6 +241,10 @@ impl RegistryContract {
                 .ok_or(Error::Overflow)?;
         }
 
+        if record.status != status {
+            storage::remove_status_id(&env, record.status, subscription_id);
+            storage::push_status_id(&env, status, subscription_id);
+        }
         let mut merchant_stats = storage::read_merchant_stats(&env, &record.merchant);
         merchant_stats.total_charged_volume = merchant_stats
             .total_charged_volume
@@ -334,6 +343,31 @@ impl RegistryContract {
         storage::read_all_ids(&env)
     }
 
+    /// A page of subscription ids whose last reported status is `status`
+    /// (0 Active, 1 Paused, 2 Cancelled, 3 Exhausted).
+    ///
+    /// Returns at most `limit` ids, starting at offset `start` within the
+    /// index for that status. `limit` may be at most [`MAX_PAGE_SIZE`]. An
+    /// offset past the end returns an empty page.
+    pub fn get_sub_records_by_status(
+        env: Env,
+        status: u32,
+        start: u32,
+        limit: u32,
+    ) -> Result<Vec<u64>, Error> {
+        if status > STATUS_EXHAUSTED {
+            return Err(Error::InvalidStatus);
+        }
+        if limit > MAX_PAGE_SIZE {
+            return Err(Error::PageSizeTooLarge);
+        }
+        let ids = storage::read_ids_by_status(&env, status);
+        let mut out = Vec::new(&env);
+        let end = start.saturating_add(limit).min(ids.len());
+        for i in start..end {
+            if let Some(id) = ids.get(i) {
+                out.push_back(id);
+            }
     /// Extend the TTL of the `AllSubscriptions` history so it cannot archive
     /// while the registry is quiet. Permissionless: it only extends lifetime
     /// and never changes data, so anyone (an operator's cron job, say) may call it.
