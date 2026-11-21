@@ -54,6 +54,28 @@ fn instance_ttl(s: &Setup) -> u32 {
 }
 
 #[test]
+fn refresh_allowance_extends_each_subscription_persistent_ttl() {
+    let s = Setup::new();
+    let ids = [s.subscribe(), s.subscribe(), s.subscribe()];
+
+    // Move the clock close to the persistent TTL threshold so the next read
+    // of each record must extend it.
+    s.advance(2 * DAY);
+    let before: Vec<u32> = ids.iter().map(|&id| sub_ttl(&s, id)).collect();
+
+    s.client.refresh_allowance(&ids);
+
+    for (i, &id) in ids.iter().enumerate() {
+        let after = sub_ttl(&s, id);
+        assert!(
+            after > before[i],
+            "refresh_allowance did not extend Sub({id}) TTL ({} -> {after})",
+            before[i]
+        );
+    }
+}
+
+#[test]
 fn charge_cancel_pause_and_resume_extend_instance_ttl() {
     let s = Setup::new();
     let id = s.subscribe();
@@ -102,4 +124,31 @@ fn charge_succeeds_after_25_days_with_no_contract_activity() {
 
     s.client.charge(&s.merchant, &id);
     assert_eq!(s.balance(&s.merchant), super::setup::AMOUNT);
+/// The persistent TTL of a subscriber's index entry.
+fn subscriber_index_ttl(s: &Setup) -> u32 {
+    s.env.as_contract(&s.client.address, || {
+        s.env
+            .storage()
+            .persistent()
+            .get_ttl(&DataKey::BySubscriber(s.subscriber.clone()))
+    })
+}
+
+#[test]
+fn charging_extends_the_subscriber_index_ttl() {
+    let s = Setup::new();
+    let id = s.subscribe();
+
+    // The subscriber never calls again. Only the merchant charges.
+    s.advance(2 * DAY);
+    let before = subscriber_index_ttl(&s);
+
+    s.client.charge(&s.merchant, &id);
+    let after = subscriber_index_ttl(&s);
+
+    assert!(
+        after > before,
+        "charge did not extend BySubscriber ({before} -> {after})"
+    );
+    assert_eq!(s.client.get_by_subscriber(&s.subscriber).len(), 1);
 }

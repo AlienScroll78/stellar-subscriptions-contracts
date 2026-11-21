@@ -31,6 +31,9 @@ contract's, which is the one that must stay live between charges.)
 - **Instance storage** holds data there is only one of per contract:
   `Admin`, `NextId`, linked contract addresses, `Writers`, `Stats`. It is
   bumped to live 30 days (`INSTANCE_BUMP_AMOUNT`) whenever
+  `Admin`, `NextId`, linked contract addresses and `Writers`. It is
+  `Admin`, `NextId`, linked contract addresses, `Writers`. It is
+  bumped to live 7 days (`INSTANCE_BUMP_AMOUNT`) whenever
   `bump_instance(env)` runs, once its remaining TTL falls to
   `INSTANCE_LIFETIME_THRESHOLD` (29 days) or below. The 30-day bump is what
   lets a deployment with only monthly subscriptions go a full billing cycle
@@ -38,6 +41,9 @@ contract's, which is the one that must stay live between charges.)
 - **Persistent storage** holds per-id records that must survive
   independently of each other: a `Subscription`, a `Plan`, a
   `SubscriptionRecord`, and the index entries (`BySubscriber`, `ByMerchant`,
+  `AllSubscriptions`, `AllPlans`, and the registry's `Stats`). Each is bumped to live 30 days
+  `SubscriptionRecord`, the registry's aggregate `Stats` (moved here so a
+  quiet registry does not lose its counters with the instance entry), and the index entries (`BySubscriber`, `ByMerchant`,
   `AllSubscriptions`, `AllPlans`). Each is bumped to live 30 days
   (`PERSISTENT_BUMP_AMOUNT`) via `bump_persistent(env, key)`, once its
   remaining TTL falls to `PERSISTENT_LIFETIME_THRESHOLD` (29 days) or below.
@@ -57,12 +63,44 @@ Every function that reads or writes a persistent entry calls
   `push_id` (registry) bump the index entry they read or append to.
 
 This means the TTL clock restarts on the *entry*, not on a per-subscription
-basis across all its related entries: charging a subscription bumps its
-`Sub(id)` entry, but does not by itself bump that subscriber's `BySubscriber`
-index entry unless that index is also read or written in the same call.
-Entry point functions that touch several of these keys in one transaction
-(e.g. `charge`, which reads `Sub(id)` and may update the registry's
-`Record(id)`) bump all of the keys they go through.
+basis across all its related entries. `charge` is the one entry point that
+must bump more than its own record: it bumps `Sub(id)`, the subscriber's
+`BySubscriber` index and the merchant's `ByMerchant` index (via
+`touch_index`, which only extends an index that already exists), and the
+registry's `Record(id)` when linked. Without that, a subscriber who is charged
+for years but never calls the contract would let `BySubscriber` archive while
+its records stay live, breaking `get_by_subscriber`, `cancel` and
+`refresh_allowance`. Entry point functions that touch several of these keys
+in one transaction bump all of the keys they go through.
+
+### The `refresh_allowance` bump chain
+
+`refresh_allowance` is the one entry point that deliberately walks *every*
+subscription belonging to a subscriber, so it is worth tracing exactly which
+keys get bumped:
+
+1. `refresh_allowance` reads the subscriber's `BySubscriber` index
+   (`read_index`), which bumps that index entry.
+2. For each id in the index it calls `allowance::sync`.
+3. `allowance::sync` calls `outstanding` to compute the accrued allowance.
+4. `outstanding` calls `read_sub(id)` for that subscription.
+5. `read_sub` calls `bump_persistent(env, &SubKey::Sub(id))` before
+   returning the stored `Subscription`.
+
+So a single `refresh_allowance` call extends the persistent TTL of the
+`BySubscriber` index entry *and* of every `Sub(id)` entry listed in it - not
+just the subscription whose allowance happened to change. This is the
+intended behaviour: a subscriber refreshing their allowance is a sign of
+activity for all of their subscriptions, and the refresh keeps the whole set
+alive together.
+
+The chain was traced and covered by a test asserting that after
+`refresh_allowance` each `Sub(id)`'s persistent TTL is extended; no missing
+`bump_persistent` call was found in the chain, so no code change was needed.
+The only caveat is the one described above: subscriptions are only reached
+through the `BySubscriber` index, so if that index entry itself has already
+been archived, `refresh_allowance` cannot enumerate them and fails before any
+`Sub(id)` is bumped.
 
 Instance-level data is bumped the same way, via `bump_instance`, inside the
 contracts' entry points that touch instance storage.
@@ -90,6 +128,22 @@ address calling in.
 The `BySubscriber` / `ByMerchant` index entries for a subscriber or merchant
 with no activity for 30 days are equally subject to archival, independently
 of the `Sub(id)` entries they list.
+
+## The registry's `AllSubscriptions` history
+
+The registry keeps one persistent vec, `AllSubscriptions`, of every
+registered subscription id. It is bumped only by `register_subscription`. If
+no subscription is registered for the 30-day persistent window, the vec
+archives and `get_all_subscriptions` returns an empty result. The next
+registration then starts a new vec, so the earlier history is missing from the
+registry's view until it is restored.
+
+Mitigation: `keep_alive()` on the registry extends the TTL of
+`AllSubscriptions` and the instance storage. It is permissionless and changes
+no data. Call it at least every 20 days, for example from a scheduled job. The
+test `history_survives_a_quiet_period_when_kept_alive` in
+`contracts/registry/src/test.rs` covers a 60-day quiet period with that
+cadence.
 
 ## Restoring an archived entry
 
