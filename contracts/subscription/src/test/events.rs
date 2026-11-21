@@ -67,6 +67,7 @@ fn subscribe_with_trial_emits_trial_and_expiry() {
             plan_id: 0,
             trial_ledgers: trial,
             expires_at: now + trial,
+            expires_at: 0,
         },
     );
 }
