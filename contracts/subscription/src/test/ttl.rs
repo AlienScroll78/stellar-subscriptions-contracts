@@ -89,3 +89,17 @@ fn day_constant_is_shared_and_matches_ttl_assumption() {
     assert_eq!(DAY, 17_280);
     assert_eq!(7 * DAY, 120_960);
 }
+
+/// A deployment with only long-interval subscriptions can go weeks without a
+/// contract call. The instance must still be live when the next charge
+/// arrives, so that charge succeeds.
+#[test]
+fn charge_succeeds_after_25_days_with_no_contract_activity() {
+    let s = Setup::new();
+    let id = s.subscribe();
+
+    s.advance(25 * DAY);
+
+    s.client.charge(&s.merchant, &id);
+    assert_eq!(s.balance(&s.merchant), super::setup::AMOUNT);
+}
