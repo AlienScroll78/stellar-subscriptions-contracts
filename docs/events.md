@@ -31,6 +31,8 @@ Emitted when a subscriber creates a new subscription.
 | data 2 | interval_ledgers | `u32` | e.g. `720` |
 | data 3 | total_cap | `i128` | e.g. `120000000` |
 | data 4 | plan_id | `u64` | `0` for ad-hoc, non-zero for plan-based |
+| data 5 | trial_ledgers | `u32` | number of ledgers in the trial period, e.g. `0` for no trial |
+| data 6 | expires_at | `u32` | ledger sequence at which the subscription expires |
 
 **When emitted:** at the end of a successful `subscribe()` call, after the
 token allowance is approved and the registry is updated.
@@ -53,7 +55,9 @@ token allowance is approved and the registry is updated.
     10000000,
     720,
     120000000,
-    1
+    1,
+    0,
+    4693712
   ]
 }
 ```
@@ -256,10 +260,11 @@ Emitted when a merchant publishes a new billing plan.
 | topic 1 | plan_id | `u64` | e.g. `1` |
 | topic 2 | merchant | `Address` | merchant's Stellar address |
 | data 0 | name | `String` | plan display name (1–64 bytes) |
-| data 1 | token | `Address` | token contract address |
-| data 2 | amount_per_period | `i128` | e.g. `10000000` |
-| data 3 | interval_ledgers | `u32` | e.g. `720` |
-| data 4 | default_cap | `i128` | suggested cap (>= amount_per_period) |
+| data 1 | description | `Option<String>` | optional description (0–256 bytes), `null` if not set |
+| data 2 | token | `Address` | token contract address |
+| data 3 | amount_per_period | `i128` | e.g. `10000000` |
+| data 4 | interval_ledgers | `u32` | e.g. `720` |
+| data 5 | default_cap | `i128` | suggested cap (>= amount_per_period) |
 
 **When emitted:** at the end of a successful `create_plan()` call, after the
 plan is registered with the registry.
@@ -278,10 +283,45 @@ plan is registered with the registry.
   ],
   "data": [
     "Demo hourly",
+    "Hourly demo plan for testing",
     "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC",
     10000000,
     720,
     120000000
+  ]
+}
+```
+
+---
+
+### `plan_description_updated`
+
+Emitted when a merchant updates the description of an existing plan.
+
+| Position | Kind | Type | Value |
+|---|---|---|---|
+| topic 0 | event name | `Symbol` | `"plan_description_updated"` |
+| topic 1 | plan_id | `u64` | e.g. `1` |
+| topic 2 | merchant | `Address` | merchant's Stellar address |
+| data 0 | description | `Option<String>` | new description (0–256 bytes), `null` if cleared |
+
+**When emitted:** at the end of a successful `set_plan_description()` call,
+after the plan is updated in storage.
+
+**Decoded example (Testnet, Plan 1):**
+
+```json
+{
+  "type": "contract",
+  "ledger": 4695100,
+  "contractId": "CDKFRKPA2EIYMW2GX2FY4ZFQ2VAFS5UZD5BHAZLCIGRA7N24N2DFAYN3",
+  "topics": [
+    "plan_description_updated",
+    1,
+    "GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+  ],
+  "data": [
+    "Updated hourly demo plan"
   ]
 }
 ```
