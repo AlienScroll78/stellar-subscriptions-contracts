@@ -20,7 +20,10 @@ pub enum DataKey {
     Admin,
     /// Instance: contracts allowed to write.
     Writers,
-    /// Instance: aggregate counters.
+    /// Persistent: aggregate counters. Kept out of instance storage so it
+    /// has its own TTL and is not tied to the instance's 7-day bump.
+    /// Persistent: aggregate counters. Kept out of instance storage so they
+    /// are not archived together with the instance's 7-day TTL.
     Stats,
     /// Persistent: one subscription's record.
     Record(u64),
@@ -28,6 +31,8 @@ pub enum DataKey {
     AllSubscriptions,
     /// Persistent: marks a plan id as counted.
     Plan(u64),
+    /// Persistent: ids of a merchant's subscriptions, oldest first.
+    ByMerchant(Address),
 }
 
 pub fn bump_instance(env: &Env) {
@@ -75,14 +80,20 @@ pub fn read_writers(env: &Env) -> Result<Writers, Error> {
 }
 
 pub fn read_stats(env: &Env) -> RegistryStats {
-    env.storage()
-        .instance()
-        .get(&DataKey::Stats)
-        .unwrap_or_default()
+    let key = DataKey::Stats;
+    match env.storage().persistent().get(&key) {
+        Some(stats) => {
+            bump_persistent(env, &key);
+            stats
+        }
+        None => RegistryStats::default(),
+    }
 }
 
 pub fn write_stats(env: &Env, stats: &RegistryStats) {
-    env.storage().instance().set(&DataKey::Stats, stats);
+    let key = DataKey::Stats;
+    env.storage().persistent().set(&key, stats);
+    bump_persistent(env, &key);
 }
 
 pub fn has_record(env: &Env, id: u64) -> bool {
@@ -144,4 +155,29 @@ pub fn mark_plan(env: &Env, plan_id: u64) -> bool {
     env.storage().persistent().set(&key, &true);
     bump_persistent(env, &key);
     true
+}
+
+/// Append a subscription id to its merchant's index.
+pub fn push_merchant_id(env: &Env, merchant: &Address, id: u64) {
+    let key = DataKey::ByMerchant(merchant.clone());
+    let mut ids: Vec<u64> = env
+        .storage()
+        .persistent()
+        .get(&key)
+        .unwrap_or_else(|| Vec::new(env));
+    ids.push_back(id);
+    env.storage().persistent().set(&key, &ids);
+    bump_persistent(env, &key);
+}
+
+/// Every subscription id for a merchant, oldest first.
+pub fn read_merchant_ids(env: &Env, merchant: &Address) -> Vec<u64> {
+    let key = DataKey::ByMerchant(merchant.clone());
+    match env.storage().persistent().get(&key) {
+        Some(ids) => {
+            bump_persistent(env, &key);
+            ids
+        }
+        None => Vec::new(env),
+    }
 }
