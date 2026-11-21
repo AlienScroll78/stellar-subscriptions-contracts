@@ -38,6 +38,27 @@ pub struct RegistryStats {
     pub total_charged_volume: i128,
 }
 
+/// Aggregate counters scoped to one merchant.
+/// Per-merchant counters.
+// See the `#[allow(missing_docs)]` note on `RegistryStats` above.
+#[allow(missing_docs)]
+#[contracttype]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MerchantStats {
+    /// Every subscription ever registered for this merchant.
+    pub total_subscriptions: u64,
+    /// Subscriptions whose last reported status is Active, for this merchant.
+    pub active_subscriptions: u64,
+    /// Sum of every reported charge for this merchant, across all tokens, in
+    /// raw units.
+    /// Every subscription ever registered to this merchant.
+    pub subscriptions: u64,
+    /// Subscriptions to this merchant whose last reported status is Active.
+    pub active_subscriptions: u64,
+    /// Sum of every reported charge to this merchant, in raw units.
+    pub total_charged_volume: i128,
+}
+
 /// The contracts allowed to write to the registry.
 // See the `#[allow(missing_docs)]` note on `RegistryStats` above.
 #[allow(missing_docs)]
@@ -62,8 +83,25 @@ pub struct SubscriptionRecord {
     pub subscriber: Address,
     /// Who may charge the subscription.
     pub merchant: Address,
+    /// The token the subscription is charged in, so indexers can filter by
+    /// payment token without loading the subscription contract's record.
+    pub token: Address,
     /// Total charged so far, as last reported.
     pub total_charged: i128,
-    /// Last reported status (0 Active, 1 Paused, 2 Cancelled, 3 Exhausted).
+    /// Last reported status (0 Active, 1 Paused, 2 Cancelled, 3 Exhausted,
+    /// 4 MerchantEnded).
     pub status: u32,
+}
+
+/// Per-merchant counters.
+// See the `#[allow(missing_docs)]` note on `RegistryStats` above.
+#[allow(missing_docs)]
+#[contracttype]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MerchantStats {
+    pub subscriptions: u64,
+    /// Subscriptions whose last reported status is Active.
+    pub active_subscriptions: u64,
+    /// Sum of every reported charge, in raw units.
+    pub total_charged_volume: i128,
 }
