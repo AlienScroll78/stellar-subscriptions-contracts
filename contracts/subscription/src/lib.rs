@@ -576,6 +576,32 @@ impl SubscriptionContract {
         Self::load_indexed(&env, &DataKey::ByMerchant(merchant))
     }
 
+    /// Number of subscriptions created from a plan. Returns 0 for plan_id=0
+    /// (ad-hoc subscriptions are never indexed by plan).
+    pub fn count_by_plan(env: Env, plan_id: u64) -> u32 {
+        storage::read_index(&env, &DataKey::ByPlan(plan_id)).len()
+    }
+
+    /// Subscriptions from a plan, oldest first. Returns up to `limit` entries
+    /// starting at `offset`. Ad-hoc subscriptions (plan_id=0) are never indexed
+    /// here, so this always returns an empty vec for plan_id=0.
+    pub fn get_by_plan_page(
+        env: Env,
+        plan_id: u64,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Vec<Subscription>, Error> {
+        if limit == 0 {
+            return Ok(Vec::new(&env));
+        }
+        let ids = storage::read_index(&env, &DataKey::ByPlan(plan_id));
+        let end = offset.checked_add(limit).ok_or(Error::Overflow)?;
+        let len = ids.len();
+        let mut out = Vec::new(&env);
+        for i in offset..end.min(len) {
+            out.push_back(storage::read_sub(&env, ids.get(i).unwrap())?);
+        }
+        Ok(out)
     /// Every subscription created against a plan, oldest first. Ad-hoc
     /// subscriptions (`plan_id` 0) are never indexed, so 0 returns empty.
     pub fn get_by_plan(env: Env, plan_id: u64) -> Result<Vec<Subscription>, Error> {
