@@ -90,6 +90,22 @@ The `BySubscriber` / `ByMerchant` index entries for a subscriber or merchant
 with no activity for 30 days are equally subject to archival, independently
 of the `Sub(id)` entries they list.
 
+## The registry's `AllSubscriptions` history
+
+The registry keeps one persistent vec, `AllSubscriptions`, of every
+registered subscription id. It is bumped only by `register_subscription`. If
+no subscription is registered for the 30-day persistent window, the vec
+archives and `get_all_subscriptions` returns an empty result. The next
+registration then starts a new vec, so the earlier history is missing from the
+registry's view until it is restored.
+
+Mitigation: `keep_alive()` on the registry extends the TTL of
+`AllSubscriptions` and the instance storage. It is permissionless and changes
+no data. Call it at least every 20 days, for example from a scheduled job. The
+test `history_survives_a_quiet_period_when_kept_alive` in
+`contracts/registry/src/test.rs` covers a 60-day quiet period with that
+cadence.
+
 ## Restoring an archived entry
 
 Soroban allows an archived persistent entry to be restored (paying the

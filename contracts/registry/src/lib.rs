@@ -211,6 +211,14 @@ impl RegistryContract {
         storage::read_all_ids(&env)
     }
 
+    /// Extend the TTL of the `AllSubscriptions` history so it cannot archive
+    /// while the registry is quiet. Permissionless: it only extends lifetime
+    /// and never changes data, so anyone (an operator's cron job, say) may call it.
+    pub fn keep_alive(env: Env) {
+        storage::bump_instance(&env);
+        storage::keep_all_subscriptions_alive(&env);
+    }
+
     /// Ids of subscriptions whose last reported status is Active.
     pub fn get_active_subscriptions(env: Env) -> Result<Vec<u64>, Error> {
         let mut out = Vec::new(&env);

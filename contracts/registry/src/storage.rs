@@ -117,6 +117,16 @@ pub fn read_all_ids(env: &Env) -> Vec<u64> {
     }
 }
 
+/// Extend the TTL of the `AllSubscriptions` vec if it exists. It is otherwise
+/// only bumped by `register_subscription`, so a registry that goes quiet could
+/// archive the whole history.
+pub fn keep_all_subscriptions_alive(env: &Env) {
+    let key = DataKey::AllSubscriptions;
+    if env.storage().persistent().has(&key) {
+        bump_persistent(env, &key);
+    }
+}
+
 pub fn push_id(env: &Env, id: u64) {
     let key = DataKey::AllSubscriptions;
     let mut ids = read_all_ids(env);
