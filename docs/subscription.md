@@ -57,6 +57,7 @@ are never renumbered.
 | `resume(subscriber, subscription_id)` | **subscriber** | |
 | `merchant_end(merchant, subscription_id)` | **merchant** | Final. Mirrors `cancel`, initiated by the merchant. |
 | `refresh_allowance(subscriber, token) -> i128` | **subscriber** | Re-approves the outstanding cap with a fresh expiry. |
+| `get_subscription`, `get_subscription_by_id`, `is_chargeable`, `remaining_cap`, `get_by_subscriber`, `get_by_merchant`, `get_plan_contract`, `get_registry`, `get_admin` | none | Views. `get_subscription_by_id` is an alias of `get_subscription`. |
 | `get_subscription`, `get_subscription_summary`, `is_chargeable`, `remaining_cap`, `get_by_subscriber`, `get_by_merchant`, `get_plan_contract`, `get_registry` | none | Views. |
 
 ### `get_subscription_summary`

@@ -60,6 +60,7 @@ counter only — it is not decremented on cancellation or expiry.
 | `get_plans_by_token(token, offset, limit) -> Vec<Plan>` | none | Oldest first. If `offset >= len`, returns an **empty vec** (not an error); see below. |
 | `get_active_plans() -> Vec<Plan>` | none | Oldest first. |
 | `get_registry() -> Option<Address>` | none | |
+| `get_admin() -> Address` | none | |
 
 ### `get_plans_by_token` pagination
 

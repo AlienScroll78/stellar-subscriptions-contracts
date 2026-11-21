@@ -89,6 +89,9 @@ impl SubscriptionContract {
         storage::read_registry(&env)
     }
 
+    /// Get the admin address.
+    pub fn get_admin(env: Env) -> Result<Address, Error> {
+        storage::read_admin(&env)
     /// Backward-compatible entry point for callers that do not need trials.
     ///
     /// Delegates to [`subscribe`](Self::subscribe) with `trial_ledgers = 0`,
@@ -680,7 +683,16 @@ impl SubscriptionContract {
         Ok(amount)
     }
 
+    /// Deprecated: use [`Self::get_subscription_by_id`] instead. Kept for
+    /// backwards compatibility.
+    #[deprecated(since = "0.0.0", note = "use get_subscription_by_id instead")]
     pub fn get_subscription(env: Env, subscription_id: u64) -> Result<Subscription, Error> {
+        storage::read_sub(&env, subscription_id)
+    }
+
+    /// Alias of `get_subscription`, named consistently with
+    /// `get_by_subscriber` and `get_by_merchant`.
+    pub fn get_subscription_by_id(env: Env, subscription_id: u64) -> Result<Subscription, Error> {
         storage::read_sub(&env, subscription_id)
     }
 

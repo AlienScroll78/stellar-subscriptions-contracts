@@ -22,6 +22,11 @@
 # Usage:
 #   ./examples/subscribe.sh
 #   PLAN_ID=<plan-id> ./examples/subscribe.sh
+#   TRIAL_LEDGERS=<n> PLAN_ID=<plan-id> ./examples/subscribe.sh
+#
+# See also:
+#   examples/subscribe-with-trial.sh - subscribes with a 1-week free trial.
+#   examples/subscribe-until.sh      - subscribes with a fixed expiry ledger.
 
 set -euo pipefail
 
@@ -78,6 +83,10 @@ SUBSCRIBE_OUTPUT="$(
     --rpc-url "${RPC_URL}" \
     --network-passphrase "${NETWORK_PASSPHRASE}" \
     -- \
+    subscribe \
+      --plan_id "${PLAN_ID}" \
+      --subscriber "${SUBSCRIBER_IDENTITY}" \
+      --trial_ledgers "${TRIAL_LEDGERS:-0}"
     subscribe_simple \
       --subscriber "${SUBSCRIBER_IDENTITY}" \
       --merchant "${MERCHANT_IDENTITY}" \
