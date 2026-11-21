@@ -19,5 +19,6 @@ mod interval_limits;
 mod plan_index;
 mod registry_status;
 mod simulation_drift;
+mod trial;
 mod validation;
 mod views;
