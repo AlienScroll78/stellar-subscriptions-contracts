@@ -13,16 +13,22 @@ mod storage;
 mod types;
 
 pub use errors::Error;
+pub use types::{SubStatus, Subscription, SubscriptionSummary};
 pub use types::{ChargeStatus, SubStatus, Subscription};
 
-use events::{Cancelled, Charged, Paused, Resumed, Subscribed};
+use events::{Cancelled, Charged, MerchantEnded, Paused, Resumed, Subscribed};
 use interfaces::{PlanClient, RegistryClient};
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env, Vec};
 use storage::DataKey;
+use types::SubscriptionSummary;
 
 /// Most subscriptions one `batch_charge` call may charge, so a batch stays
 /// within the per-transaction write budget.
 pub const MAX_BATCH: u32 = 20;
+
+/// Most entries `get_by_subscriber` / `get_by_merchant` may return in one
+/// call, so a large history cannot exceed the transaction budget.
+pub const MAX_LIST_SIZE: u32 = 200;
 
 #[contract]
 pub struct SubscriptionContract;
@@ -235,6 +241,9 @@ impl SubscriptionContract {
             total_charged: 0,
             start_ledger: now,
             last_charge_ledger: 0,
+            // A trial delays the first charge; without one, the first charge
+            // is available immediately.
+            next_charge_ledger: now.saturating_add(trial_ledgers),
             next_charge_ledger: now.saturating_add(trial_ledgers),
             next_charge_ledger,
             status: SubStatus::Active,
@@ -384,6 +393,7 @@ impl SubscriptionContract {
         Charged {
             subscription_id,
             merchant: sub.merchant,
+            token: sub.token.clone(),
             token: sub.token,
             amount: sub.amount_per_period,
             total_charged: sub.total_charged,
@@ -534,6 +544,41 @@ impl SubscriptionContract {
         Ok(())
     }
 
+    /// Merchant ends a subscription. Final: no further charges, pauses,
+    /// resumes or subscriber cancellations, ever.
+    ///
+    /// Allowed from Active or Paused. Mirrors `cancel`, but is authorized
+    /// and initiated by the merchant instead of the subscriber.
+    pub fn merchant_end(env: Env, merchant: Address, subscription_id: u64) -> Result<(), Error> {
+        merchant.require_auth();
+        let mut sub = storage::read_sub(&env, subscription_id)?;
+        if sub.merchant != merchant {
+            return Err(Error::NotMerchant);
+        }
+        match sub.status {
+            SubStatus::Active | SubStatus::Paused => {}
+            SubStatus::Cancelled => return Err(Error::SubscriptionCancelled),
+            SubStatus::Exhausted => return Err(Error::SubscriptionExhausted),
+            SubStatus::MerchantEnded => return Err(Error::SubscriptionMerchantEnded),
+        }
+
+        sub.status = SubStatus::MerchantEnded;
+        storage::write_sub(&env, &sub);
+
+        // Ending must succeed even if the registry refuses the follow-up
+        // update; that outcome is reporting-only and never blocks it.
+        let _ = Self::report(&env, &sub);
+
+        storage::bump_instance(&env);
+        MerchantEnded {
+            subscription_id,
+            merchant: sub.merchant,
+            total_charged: sub.total_charged,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
     /// Subscriber re-approves this contract for the cap still outstanding
     /// across their open subscriptions in `token`, with a fresh expiry.
     /// Returns the approved amount.
@@ -617,15 +662,36 @@ impl SubscriptionContract {
     }
 
     /// Every subscription a subscriber has created, oldest first.
+    ///
+    /// Fails with `ListTooLarge` instead of loading more than
+    /// `MAX_LIST_SIZE` subscriptions, so a subscriber with a very large
+    /// history cannot push a caller over the transaction budget.
     pub fn get_by_subscriber(env: Env, subscriber: Address) -> Result<Vec<Subscription>, Error> {
         Self::load_indexed(&env, &DataKey::BySubscriber(subscriber))
     }
 
     /// Every subscription payable to a merchant, oldest first.
+    ///
+    /// Fails with `ListTooLarge` instead of loading more than
+    /// `MAX_LIST_SIZE` subscriptions, so a merchant with a very large
+    /// history cannot push a caller over the transaction budget.
     pub fn get_by_merchant(env: Env, merchant: Address) -> Result<Vec<Subscription>, Error> {
         Self::load_indexed(&env, &DataKey::ByMerchant(merchant))
     }
 
+    /// Lightweight analytics view of a subscription: its status and running
+    /// totals, without the cost of returning the full `Subscription`.
+    pub fn get_subscription_summary(
+        env: Env,
+        subscription_id: u64,
+    ) -> Result<SubscriptionSummary, Error> {
+        let sub = storage::read_sub(&env, subscription_id)?;
+        Ok(SubscriptionSummary {
+            id: sub.id,
+            status: sub.status,
+            total_charged: sub.total_charged,
+            next_charge_ledger: sub.next_charge_ledger,
+        })
     /// Page of a subscriber's subscriptions, oldest first.
     ///
     /// A `limit` of 0 returns an empty vector.
@@ -777,8 +843,12 @@ impl SubscriptionContract {
     }
 
     fn load_indexed(env: &Env, key: &DataKey) -> Result<Vec<Subscription>, Error> {
+        let ids = storage::read_index(env, key);
+        if ids.len() > MAX_LIST_SIZE {
+            return Err(Error::ListTooLarge);
+        }
         let mut out = Vec::new(env);
-        for id in storage::read_index(env, key).iter() {
+        for id in ids.iter() {
             out.push_back(storage::read_sub(env, id)?);
         }
         Ok(out)
