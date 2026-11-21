@@ -96,6 +96,45 @@ fn cancel_emits_cancelled_with_the_unused_cap() {
 }
 
 #[test]
+fn cancel_reports_the_exact_unused_cap_after_a_known_number_of_charges() {
+    let s = Setup::new();
+    let id = s.subscribe_with(60, INTERVAL, 300);
+    s.client.charge(&s.merchant, &id);
+    s.advance(INTERVAL);
+    s.client.charge(&s.merchant, &id);
+    s.client.cancel(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Cancelled {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            total_charged: 120,
+            unused_cap: 180,
+            allowance_updated: true,
+            registry_updated: true,
+        },
+    );
+}
+
+#[test]
+fn cancel_with_no_charges_reports_the_full_cap_as_unused() {
+    let s = Setup::new();
+    let id = s.subscribe_with(AMOUNT, INTERVAL, 100);
+    s.client.cancel(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Cancelled {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            total_charged: 0,
+            unused_cap: 100,
+            allowance_updated: true,
+            registry_updated: true,
+        },
+    );
+}
+
+#[test]
 fn pause_emits_paused() {
     let s = Setup::new();
     let id = s.subscribe();
