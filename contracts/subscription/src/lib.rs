@@ -16,6 +16,7 @@ pub use errors::Error;
 pub use types::{SubStatus, Subscription, SubscriptionSummary};
 pub use types::{ChargeStatus, SubStatus, Subscription};
 
+use events::{Cancelled, Charged, Paused, PlanAssociated, Resumed, Subscribed};
 use events::{Cancelled, Charged, MerchantEnded, Paused, Resumed, Subscribed};
 use interfaces::{PlanClient, RegistryClient};
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env, Vec};
@@ -241,6 +242,7 @@ impl SubscriptionContract {
             total_charged: 0,
             start_ledger: now,
             last_charge_ledger: 0,
+            next_charge_ledger: now + trial_ledgers,
             // A trial delays the first charge; without one, the first charge
             // is available immediately.
             next_charge_ledger: now.saturating_add(trial_ledgers),
@@ -586,6 +588,41 @@ impl SubscriptionContract {
         Ok(())
     }
 
+    /// Subscriber retroactively links an ad-hoc subscription (`plan_id == 0`)
+    /// to an existing plan, provided the plan's terms match the
+    /// subscription exactly and the plan is still active.
+    ///
+    /// This only updates the subscription's bookkeeping (`plan_id` and the
+    /// `ByPlan` index) — it changes none of the subscription's actual terms,
+    /// since `check_plan` requires them to already match the plan.
+    pub fn associate_plan(
+        env: Env,
+        subscriber: Address,
+        subscription_id: u64,
+        plan_id: u64,
+    ) -> Result<(), Error> {
+        let mut sub = Self::load_for_subscriber(&env, &subscriber, subscription_id)?;
+        if plan_id == 0 {
+            return Err(Error::PlanNotFound);
+        }
+        Self::check_plan(
+            &env,
+            plan_id,
+            &sub.merchant,
+            &sub.token,
+            sub.amount_per_period,
+            sub.interval_ledgers,
+        )?;
+
+        sub.plan_id = plan_id;
+        storage::write_sub(&env, &sub);
+        storage::push_index(&env, DataKey::ByPlan(plan_id), subscription_id);
+        storage::bump_instance(&env);
+
+        PlanAssociated {
+            subscription_id,
+            subscriber,
+            plan_id,
     /// Merchant ends a subscription. Final: no further charges, pauses,
     /// resumes or subscriber cancellations, ever.
     ///

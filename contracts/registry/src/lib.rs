@@ -25,6 +25,7 @@ pub const MAX_PAGE_SIZE: u32 = 100;
 pub use errors::Error;
 pub use types::{
     MerchantStats, RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED,
+    STATUS_EXHAUSTED, STATUS_MERCHANT_ENDED, STATUS_PAUSED,
     STATUS_EXHAUSTED, STATUS_PAUSED,
     RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
     STATUS_MERCHANT_ENDED, STATUS_PAUSED,
@@ -152,6 +153,8 @@ impl RegistryContract {
         storage::write_stats(&env, &stats);
 
         let mut merchant_stats = storage::read_merchant_stats(&env, &merchant);
+        merchant_stats.total_subscriptions = merchant_stats
+            .total_subscriptions
         merchant_stats.subscriptions = merchant_stats
             .subscriptions
             .checked_add(1)
@@ -161,6 +164,7 @@ impl RegistryContract {
             .checked_add(1)
             .ok_or(Error::Overflow)?;
         storage::write_merchant_stats(&env, &merchant, &merchant_stats);
+
         storage::bump_instance(&env);
         SubscriptionRegistered {
             subscription_id,
@@ -236,6 +240,7 @@ impl RegistryContract {
                 .checked_add(1)
                 .ok_or(Error::Overflow)?;
         }
+        storage::write_merchant_stats(&env, &record.merchant, &merchant_stats);
 
         record.total_charged = total_charged;
         record.status = status;
@@ -262,6 +267,8 @@ impl RegistryContract {
         storage::read_stats(&env)
     }
 
+    /// Current aggregate stats scoped to one merchant. Returns a
+    /// zero-valued `MerchantStats` if the merchant has never been indexed.
     /// Aggregate stats for one merchant's subscriptions. A merchant with no
     /// subscriptions gets zeroed stats.
     pub fn get_merchant_stats(env: Env, merchant: Address) -> MerchantStats {
