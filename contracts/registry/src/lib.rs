@@ -18,6 +18,9 @@ mod types;
 /// Version of the registry's interface.
 pub const VERSION: u32 = 1;
 
+/// Largest `limit` accepted by the paginated listing functions.
+pub const MAX_PAGE_SIZE: u32 = 100;
+
 pub use errors::Error;
 pub use types::{
     RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
@@ -207,8 +210,37 @@ impl RegistryContract {
     }
 
     /// Every registered subscription id, oldest first.
+    ///
+    /// **Deprecated in favour of [`Self::get_all_subscriptions_page`].** This
+    /// reads the whole index in one call, so its cost is O(n) in the number
+    /// of subscriptions ever registered and eventually exceeds the
+    /// transaction budget. Use the paginated function for any listing.
     pub fn get_all_subscriptions(env: Env) -> Vec<u64> {
         storage::read_all_ids(&env)
+    }
+
+    /// One page of registered subscription ids, oldest first.
+    ///
+    /// Returns at most `limit` ids starting at index `start`. A `start` at or
+    /// past the end returns an empty page. `limit` must not exceed
+    /// [`MAX_PAGE_SIZE`], otherwise `PageSizeTooLarge` is returned.
+    pub fn get_all_subscriptions_page(
+        env: Env,
+        start: u32,
+        limit: u32,
+    ) -> Result<Vec<u64>, Error> {
+        if limit > MAX_PAGE_SIZE {
+            return Err(Error::PageSizeTooLarge);
+        }
+        let ids = storage::read_all_ids(&env);
+        let end = start.saturating_add(limit).min(ids.len());
+        let mut out = Vec::new(&env);
+        let mut index = start;
+        while index < end {
+            out.push_back(ids.get_unchecked(index));
+            index += 1;
+        }
+        Ok(out)
     }
 
     /// Ids of subscriptions whose last reported status is Active.

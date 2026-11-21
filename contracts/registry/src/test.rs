@@ -331,3 +331,62 @@ fn version_is_1() {
     let s = Setup::new();
     assert_eq!(s.client.version(), 1);
 }
+
+#[test]
+fn page_returns_the_requested_window_oldest_first() {
+    let s = Setup::new();
+    for id in 1..=5 {
+        s.register(id);
+    }
+    let page = s.client.get_all_subscriptions_page(&1, &2);
+    assert_eq!(ids(page), std::vec![2, 3]);
+}
+
+#[test]
+fn page_past_the_end_is_empty_and_short_at_the_tail() {
+    let s = Setup::new();
+    for id in 1..=3 {
+        s.register(id);
+    }
+    assert_eq!(
+        ids(s.client.get_all_subscriptions_page(&2, &10)),
+        std::vec![3]
+    );
+    assert!(s.client.get_all_subscriptions_page(&3, &10).is_empty());
+    assert!(s.client.get_all_subscriptions_page(&u32::MAX, &10).is_empty());
+}
+
+#[test]
+fn pages_cover_the_whole_index_in_order() {
+    let s = Setup::new();
+    for id in 1..=5 {
+        s.register(id);
+    }
+    let mut collected = std::vec::Vec::new();
+    let mut start = 0;
+    loop {
+        let page = ids(s.client.get_all_subscriptions_page(&start, &2));
+        if page.is_empty() {
+            break;
+        }
+        start += page.len() as u32;
+        collected.extend(page);
+    }
+    assert_eq!(collected, ids(s.client.get_all_subscriptions()));
+}
+
+#[test]
+fn page_size_above_the_maximum_is_rejected() {
+    let s = Setup::new();
+    s.register(1);
+    expect_err(
+        s.client
+            .try_get_all_subscriptions_page(&0, &(crate::MAX_PAGE_SIZE + 1)),
+        Error::PageSizeTooLarge,
+    );
+    // The maximum itself is allowed.
+    assert_eq!(
+        ids(s.client.get_all_subscriptions_page(&0, &crate::MAX_PAGE_SIZE)),
+        std::vec![1]
+    );
+}

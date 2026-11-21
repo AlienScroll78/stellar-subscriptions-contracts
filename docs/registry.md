@@ -59,8 +59,8 @@ Indexers can follow these events instead of polling `get_stats`.
 | `update_subscription(subscription_id, total_charged, status)` | subscription contract | See rules below. |
 | `get_stats() -> RegistryStats` | anyone | |
 | `get_subscription_record(subscription_id)` | anyone | |
-| `get_all_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
-| `get_all_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
+| `get_all_subscriptions() -> Vec<u64>` | anyone | **Deprecated.** Oldest first. O(n): reads every id in one call. Prefer the paged form. |
+| `get_all_subscriptions_page(start, limit) -> Result<Vec<u64>, Error>` | anyone | Up to `limit` ids from index `start`, oldest first. `limit` ≤ `MAX_PAGE_SIZE` (100) or `PageSizeTooLarge`. |
 | `get_active_subscriptions() -> Vec<u64>` | anyone | Oldest first. |
 | `get_active_subscriptions_page(page, limit) -> Result<Vec<u64>, Error>` | anyone | Paginated, oldest first. |
 | `get_writers() -> Writers` | anyone | |
