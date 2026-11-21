@@ -48,13 +48,42 @@ are never renumbered.
 | `initialize(admin)` | admin | Once. |
 | `set_plan_contract(admin, plan_contract)` | admin | Once, before the first subscription. |
 | `set_registry(admin, registry)` | admin | Once, before the first subscription. |
+| `subscribe(subscriber, merchant, token, amount_per_period, interval_ledgers, total_cap, plan_id, trial_ledgers) -> u64` | **subscriber** | Grants consent and approves the token allowance. |
 | `subscribe(subscriber, merchant, token, amount_per_period, interval_ledgers, total_cap, plan_id) -> u64` | **subscriber** | Grants consent and approves the token allowance. |
+| `subscribe_until(subscriber, merchant, token, amount_per_period, interval_ledgers, total_cap, plan_id, expires_at) -> u64` | **subscriber** | As `subscribe`, but the subscription expires at ledger `expires_at`. |
 | `charge(merchant, subscription_id)` | **merchant** | Must be the subscription's merchant. |
 | `cancel(subscriber, subscription_id)` | **subscriber** | Final. Can never be blocked by the token or registry. |
 | `pause(subscriber, subscription_id)` | **subscriber** | |
 | `resume(subscriber, subscription_id)` | **subscriber** | |
+| `merchant_end(merchant, subscription_id)` | **merchant** | Final. Mirrors `cancel`, initiated by the merchant. |
 | `refresh_allowance(subscriber, token) -> i128` | **subscriber** | Re-approves the outstanding cap with a fresh expiry. |
-| `get_subscription`, `is_chargeable`, `remaining_cap`, `get_by_subscriber`, `get_by_merchant`, `get_plan_contract`, `get_registry` | none | Views. |
+| `get_subscription`, `get_subscription_summary`, `is_chargeable`, `remaining_cap`, `get_by_subscriber`, `get_by_merchant`, `get_plan_contract`, `get_registry` | none | Views. |
+
+### `get_subscription_summary`
+
+For callers who only need a subscription's status and running totals (e.g.
+analytics dashboards), `get_subscription_summary(id) -> SubscriptionSummary`
+returns a lightweight struct instead of the full `Subscription`:
+
+```text
+SubscriptionSummary {
+    id: u64,
+    status: SubStatus,
+    total_charged: i128,
+    next_charge_ledger: u32,
+}
+```
+
+This avoids the instruction cost of loading and returning fields (token,
+amounts, ledgers, plan id) the caller does not need.
+
+### List size limit
+
+`get_by_subscriber` and `get_by_merchant` return `Error::ListTooLarge` if
+that party's index holds more than `MAX_LIST_SIZE` (200) subscriptions,
+instead of attempting to load and return an unbounded list. See
+`SECURITY.md` for the full resource-exhaustion discussion.
+| `get_subscription`, `is_chargeable`, `remaining_cap`, `get_by_subscriber`, `get_by_merchant`, `get_by_plan`, `get_by_plan_page`, `count_by_plan`, `get_plan_contract`, `get_registry` | none | Views. |
 
 The admin **cannot** charge, cancel, pause or resume anything, and cannot
 change a link once set.
@@ -68,9 +97,10 @@ changes:
 2. Load the subscription → `SubscriptionNotFound`
 3. Caller is the subscription's merchant → `NotMerchant`
 4. Status is `Active` → `SubscriptionPaused` / `SubscriptionCancelled` / `SubscriptionExhausted`
-5. `now >= next_charge_ledger` → `IntervalNotElapsed`
-6. `total_charged.checked_add(amount_per_period)` → `Overflow`
-7. New total `<= total_cap` → `CapExceeded`
+5. `now < expires_at` → `SubscriptionExpired` (see [Expiry](#expiry))
+6. `now >= next_charge_ledger` → `IntervalNotElapsed`
+7. `total_charged.checked_add(amount_per_period)` → `Overflow`
+8. New total `<= total_cap` → `CapExceeded`
 
 Then state is written (`total_charged`, `last_charge_ledger`,
 `next_charge_ledger = now + interval_ledgers`, and `Exhausted` if the cap is
@@ -134,6 +164,14 @@ now, without changing state:
 
 The statuses are checked in the same order as `charge()`, so the reported
 status always matches the error a `charge` call would return.
+Every subscription carries an `expires_at: u32` ledger. `subscribe` sets it to
+the maximum (`u32::MAX`), i.e. no expiry; `subscribe_until` takes it as an
+argument and rejects `expires_at <= current ledger` with `InvalidExpiry`.
+
+Once `now >= expires_at`, `charge` returns `SubscriptionExpired` and no state
+changes. Expiry is a liveness bound only: it never moves funds, never changes
+the status, and `cancel` is never blocked by it. A subscription that expires
+with cap left simply stops being chargeable.
 
 ## Pause and resume
 
@@ -194,6 +232,16 @@ Subscriptions created from a plan are indexed under `DataKey::ByPlan(plan_id)`.
 `get_by_plan`, `get_by_plan_page` and `count_by_plan` list only non-cancelled
 plan subscriptions. Callers that need the full history (including cancelled
 subscriptions) should read the `cancelled` events or the registry instead.
+Every non-zero `plan_id` is also recorded in a `ByPlan(plan_id)` index at
+`subscribe`. That index is readable:
+
+- `get_by_plan(plan_id)` returns every subscription for the plan;
+- `get_by_plan_page(plan_id, start, limit)` returns a page of them;
+- `count_by_plan(plan_id)` returns the number of subscriptions for the plan.
+
+Ad-hoc subscriptions (`plan_id = 0`) are **not** indexed and never appear in
+these views. The index is append-only: cancelled and exhausted subscriptions
+remain listed, so callers should check status if they only want live ones.
 
 ## Registry
 
@@ -207,7 +255,8 @@ succeeds and reports the outcome in the event's `registry_updated` flag.
 
 | Event | Topics | Data |
 |---|---|---|
-| `subscribed` | subscription_id, subscriber, merchant | token, amount_per_period, interval_ledgers, total_cap, plan_id |
+| `subscribed` | subscription_id, subscriber, merchant | token, amount_per_period, interval_ledgers, total_cap, plan_id, trial_ledgers, expires_at |
+| `subscribed` | subscription_id, subscriber, merchant | token, amount_per_period, interval_ledgers, total_cap, plan_id, expires_at |
 | `charged` | subscription_id, merchant | token, amount, total_charged, next_charge_ledger, exhausted |
 | `cancelled` | subscription_id, subscriber | total_charged, unused_cap, allowance_updated, registry_updated |
 | `paused` | subscription_id, subscriber | ledger |
@@ -247,6 +296,8 @@ A rejected call emits nothing.
 | 26 | `RegistryUpdateFailed` | |
 | 27 | `SubscriptionExpired` | `now > expires_at`. |
 | 28 | `SubscriptionMerchantEnded` | The merchant ended the subscription. |
+| 27 | `SubscriptionExpired` | `now >= expires_at`. No state changed. |
+| 28 | `InvalidExpiry` | `expires_at <= current ledger` in `subscribe_until`. |
 
 Codes are append-only.
 
@@ -265,3 +316,17 @@ Codes are append-only.
   iterate over every subscription that party has ever had. Parties with very
   large numbers of subscriptions should be served by an off-chain indexer
   reading the events.
+
+## Pagination
+
+The paginated views (`get_by_subscriber_page`, `get_by_merchant_page`) take a
+`limit: u32`. A `limit` of `0` is valid and means "no entries": the view
+returns an empty vector rather than an error. This policy is applied
+consistently across every paginated view, so callers can always treat
+`limit = 0` as a cheap way to probe a view without fetching data. A non-zero
+`limit` returns at most that many entries, starting at `offset`.
+- `get_by_subscriber` / `get_by_merchant` / `get_by_plan` and the allowance
+  recomputation iterate over every subscription that party or plan has ever
+  had. Parties or plans with very large numbers of subscriptions should be
+  served by an off-chain indexer reading the events, or by
+  `get_by_plan_page`.

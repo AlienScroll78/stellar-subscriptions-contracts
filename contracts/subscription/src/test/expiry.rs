@@ -35,6 +35,7 @@ fn charges_work_up_to_and_including_the_end_ledger() {
     let s = Setup::new();
     let end = START_LEDGER + 2 * INTERVAL;
     let id = subscribe_until(&s, end);
+    // The end ledger is persisted on the subscription.
     assert_eq!(s.sub(id).expires_at, end);
 
     s.client.charge(&s.merchant, &id);
@@ -43,6 +44,7 @@ fn charges_work_up_to_and_including_the_end_ledger() {
     // Exactly at the end ledger a charge is still allowed.
     s.advance(INTERVAL);
     assert_eq!(s.ledger(), end);
+    assert!(s.client.is_chargeable(&id));
     s.client.charge(&s.merchant, &id);
     assert_eq!(s.sub(id).total_charged, 3 * AMOUNT);
 }
@@ -52,6 +54,7 @@ fn no_charge_is_allowed_after_the_end_ledger() {
     let s = Setup::new();
     let end = START_LEDGER + INTERVAL;
     let id = subscribe_until(&s, end);
+    assert_eq!(s.sub(id).expires_at, end);
 
     s.set_ledger(end + 1);
     assert!(!s.client.is_chargeable(&id));
@@ -60,7 +63,9 @@ fn no_charge_is_allowed_after_the_end_ledger() {
         s.client.try_charge(&s.merchant, &id),
         Error::SubscriptionExpired,
     );
+    // A refused charge must not mutate any subscription state.
     assert_eq!(s.snapshot(id), before);
+    assert_eq!(s.sub(id).expires_at, end);
 }
 
 #[test]
@@ -81,17 +86,22 @@ fn an_end_ledger_that_is_not_in_the_future_is_refused() {
             Error::InvalidExpiry,
         );
     }
+    // The very next ledger is a valid end ledger.
+    let id = subscribe_until(&s, START_LEDGER + 1);
+    assert_eq!(s.sub(id).expires_at, START_LEDGER + 1);
 }
 
 #[test]
 fn a_plain_subscription_has_no_end() {
     let s = Setup::new();
     let id = s.subscribe();
+    // A plain subscription is unbounded: expires_at == 0 means "never".
     assert_eq!(s.sub(id).expires_at, 0);
 
     s.set_ledger(START_LEDGER + 50_000);
     assert!(s.client.is_chargeable(&id));
     s.client.charge(&s.merchant, &id);
+    assert_eq!(s.sub(id).expires_at, 0);
 }
 
 #[test]
