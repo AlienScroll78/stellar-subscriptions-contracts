@@ -17,7 +17,7 @@ mod types;
 
 pub use errors::Error;
 pub use types::{
-    RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
+    MerchantStats, RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
     STATUS_PAUSED,
 };
 
