@@ -45,4 +45,7 @@ pub struct PlanCreated {
     pub merchant: Address,
     /// Ledger sequence at which the plan was created.
     pub created_at: u32,
+    /// Number of subscriptions created against this plan. Incremented by the
+    /// subscription contract on each successful subscribe with this plan ID.
+    pub subscriber_count: u64,
 }

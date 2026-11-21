@@ -10,6 +10,8 @@ use soroban_sdk::{
 use crate::{
     Error, Plan, PlanContract, PlanContractClient, PlanCreated, PlanDeactivated, PlanReactivated,
     MAX_NAME_LEN, MAX_PAGE_SIZE,
+    Error, Plan, PlanContract, PlanContractClient, PlanCreated, PlanDeactivated,
+    PlanDescriptionUpdated, MAX_DESCRIPTION_LEN, MAX_NAME_LEN,
 };
 
 const AMOUNT: i128 = 500;
@@ -48,6 +50,15 @@ impl Setup {
     }
 
     fn create(&self, merchant: &Address, name: &str) -> u64 {
+        self.create_with_description(merchant, name, None)
+    }
+
+    fn create_with_description(
+        &self,
+        merchant: &Address,
+        name: &str,
+        description: Option<&str>,
+    ) -> u64 {
         self.client.create_plan(
             merchant,
             &self.name(name),
@@ -55,6 +66,7 @@ impl Setup {
             &AMOUNT,
             &INTERVAL,
             &CAP,
+            &description.map(|d| self.name(d)),
         )
     }
 
@@ -75,6 +87,7 @@ impl Setup {
                 &amount,
                 &interval,
                 &cap,
+                &None,
             ),
             expected,
         );
@@ -115,6 +128,7 @@ fn create_plan_before_initialize_is_rejected() {
             &AMOUNT,
             &INTERVAL,
             &CAP,
+            &None,
         ),
         Error::NotInitialized,
     );
@@ -136,6 +150,8 @@ fn create_plan_stores_every_field() {
             default_cap: CAP,
             active: true,
             created_at: 1_000,
+            description: None,
+            subscriber_count: 0,
         }
     );
 }
@@ -167,12 +183,21 @@ fn create_plan_requires_the_merchants_signature() {
                     AMOUNT,
                     INTERVAL,
                     CAP,
+                    Option::<String>::None,
                 )
                     .into_val(&s.env),
                 sub_invokes: &[],
             },
         }])
-        .try_create_plan(&s.merchant, &name, &s.token, &AMOUNT, &INTERVAL, &CAP);
+        .try_create_plan(
+            &s.merchant,
+            &name,
+            &s.token,
+            &AMOUNT,
+            &INTERVAL,
+            &CAP,
+            &None,
+        );
     assert!(result.is_err());
 }
 
@@ -190,6 +215,105 @@ fn create_plan_accepts_a_name_of_exactly_the_maximum_length() {
     let longest = "x".repeat(MAX_NAME_LEN as usize);
     let id = s.create(&s.merchant, &longest);
     assert_eq!(s.client.get_plan(&id).name.len(), MAX_NAME_LEN);
+}
+
+#[test]
+fn create_plan_stores_and_emits_a_description() {
+    let s = Setup::new();
+    let id = s.create_with_description(&s.merchant, "Pro", Some("All the pro features"));
+    assert_eq!(
+        s.client.get_plan(&id).description,
+        Some(s.name("All the pro features"))
+    );
+    let expected = PlanCreated {
+        plan_id: id,
+        merchant: s.merchant.clone(),
+        name: s.name("Pro"),
+        token: s.token.clone(),
+        amount_per_period: AMOUNT,
+        interval_ledgers: INTERVAL,
+        default_cap: CAP,
+        description: Some(s.name("All the pro features")),
+    };
+    assert_eq!(
+        s.env.events().all().filter_by_contract(&s.client.address),
+        [expected.to_xdr(&s.env, &s.client.address)]
+    );
+}
+
+#[test]
+fn create_plan_accepts_a_description_of_exactly_the_maximum_length() {
+    let s = Setup::new();
+    let longest = "x".repeat(MAX_DESCRIPTION_LEN as usize);
+    let id = s.create_with_description(&s.merchant, "Pro", Some(&longest));
+    assert_eq!(
+        s.client.get_plan(&id).description.unwrap().len(),
+        MAX_DESCRIPTION_LEN
+    );
+}
+
+#[test]
+fn create_plan_rejects_an_oversized_description() {
+    let s = Setup::new();
+    let too_long = "x".repeat(MAX_DESCRIPTION_LEN as usize + 1);
+    expect_err(
+        s.client.try_create_plan(
+            &s.merchant,
+            &s.name("Pro"),
+            &s.token,
+            &AMOUNT,
+            &INTERVAL,
+            &CAP,
+            &Some(s.name(&too_long)),
+        ),
+        Error::InvalidDescription,
+    );
+}
+
+#[test]
+fn the_merchant_can_update_the_plan_description() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "Pro");
+    s.client
+        .set_plan_description(&s.merchant, &id, &Some(s.name("Now with more")));
+    assert_eq!(
+        s.client.get_plan(&id).description,
+        Some(s.name("Now with more"))
+    );
+    let expected = PlanDescriptionUpdated {
+        plan_id: id,
+        merchant: s.merchant.clone(),
+        description: Some(s.name("Now with more")),
+    };
+    assert_eq!(
+        s.env.events().all().filter_by_contract(&s.client.address),
+        [expected.to_xdr(&s.env, &s.client.address)]
+    );
+}
+
+#[test]
+fn another_merchant_cannot_update_a_plan_description() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "Pro");
+    let rival = Address::generate(&s.env);
+    expect_err(
+        s.client
+            .try_set_plan_description(&rival, &id, &Some(s.name("Hijacked"))),
+        Error::NotPlanMerchant,
+    );
+    assert_eq!(s.client.get_plan(&id).description, None);
+}
+
+#[test]
+fn set_plan_description_rejects_an_oversized_description() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "Pro");
+    let too_long = "x".repeat(MAX_DESCRIPTION_LEN as usize + 1);
+    expect_err(
+        s.client
+            .try_set_plan_description(&s.merchant, &id, &Some(s.name(&too_long))),
+        Error::InvalidDescription,
+    );
 }
 
 #[test]
@@ -393,6 +517,7 @@ fn plan_created_event_records_the_creation_ledger() {
         interval_ledgers: INTERVAL,
         default_cap: CAP,
         created_at: 4_242,
+        description: None,
     };
     assert_eq!(
         s.env.events().all().filter_by_contract(&s.client.address),
@@ -443,6 +568,56 @@ fn get_plan_count_returns_zero_when_empty() {
 }
 
 #[test]
+fn get_plan_count_is_zero_for_a_fresh_contract_and_unused_token() {
+    let s = Setup::new();
+    let unused = Address::generate(&s.env);
+    assert_eq!(s.client.get_plan_count(&unused), 0);
+}
+
+#[test]
+fn get_plan_count_tracks_each_token_independently() {
+    let s = Setup::new();
+    let other_token = Address::generate(&s.env);
+
+    for name in ["A", "B", "C"] {
+        s.client.create_plan(
+            &s.merchant,
+            &s.name(name),
+            &s.token,
+            &AMOUNT,
+            &INTERVAL,
+            &CAP,
+            &None,
+        );
+    }
+    for name in ["D", "E"] {
+        s.client.create_plan(
+            &s.merchant,
+            &s.name(name),
+            &other_token,
+            &AMOUNT,
+            &INTERVAL,
+            &CAP,
+            &None,
+        );
+    }
+
+    assert_eq!(s.client.get_plan_count(&s.token), 3);
+    assert_eq!(s.client.get_plan_count(&other_token), 2);
+}
+
+#[test]
+fn get_plan_count_is_unchanged_by_deactivation() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "A");
+    s.create(&s.merchant, "B");
+    assert_eq!(s.client.get_plan_count(&s.token), 2);
+
+    s.client.deactivate_plan(&s.merchant, &id);
+    assert_eq!(s.client.get_plan_count(&s.token), 2);
+}
+
+#[test]
 fn get_plan_count_increments_on_creation() {
     let s = Setup::new();
     assert_eq!(s.client.get_plan_count(&s.token), 0);
@@ -466,6 +641,7 @@ fn get_plan_count_ignores_plans_for_other_tokens() {
         &AMOUNT,
         &INTERVAL,
         &CAP,
+        &None,
     );
     let _id2 = s.client.create_plan(
         &s.merchant,
@@ -474,6 +650,7 @@ fn get_plan_count_ignores_plans_for_other_tokens() {
         &AMOUNT,
         &INTERVAL,
         &CAP,
+        &None,
     );
 
     assert_eq!(s.client.get_plan_count(&s.token), 1);
@@ -565,6 +742,32 @@ fn get_plans_by_token_returns_empty_when_none() {
 }
 
 #[test]
+fn get_plans_by_token_returns_empty_for_an_empty_index_at_any_offset() {
+    let s = Setup::new();
+    let token = Address::generate(&s.env);
+    assert!(s.client.get_plans_by_token(&token, &0, &10).is_empty());
+    assert!(s.client.get_plans_by_token(&token, &1, &10).is_empty());
+    assert!(s.client.get_plans_by_token(&token, &100, &10).is_empty());
+}
+
+#[test]
+fn get_plans_by_token_returns_empty_when_offset_equals_len() {
+    let s = Setup::new();
+    s.create(&s.merchant, "A");
+    s.create(&s.merchant, "B");
+    assert!(s.client.get_plans_by_token(&s.token, &2, &10).is_empty());
+}
+
+#[test]
+fn get_plans_by_token_returns_empty_when_offset_exceeds_len() {
+    let s = Setup::new();
+    s.create(&s.merchant, "A");
+    s.create(&s.merchant, "B");
+    assert!(s.client.get_plans_by_token(&s.token, &3, &10).is_empty());
+    assert!(s.client.get_plans_by_token(&s.token, &1_000, &10).is_empty());
+}
+
+#[test]
 fn get_plans_by_token_returns_plans_in_creation_order() {
     let s = Setup::new();
     let a = s.create(&s.merchant, "A");
@@ -611,9 +814,75 @@ fn get_plans_by_token_only_includes_plans_for_that_token() {
         &AMOUNT,
         &INTERVAL,
         &CAP,
+        &None,
     );
     let c = s.create(&s.merchant, "C");
 
     assert_eq!(ids(s.client.get_plans_by_token(&s.token, &0, &10)), [a, c]);
     assert_eq!(ids(s.client.get_plans_by_token(&other_token, &0, &10)), [b]);
+}
+
+#[test]
+fn get_registry_is_none_before_it_is_set() {
+    let s = Setup::new();
+    assert_eq!(s.client.get_registry(), None);
+}
+
+#[test]
+fn update_plan_description_sets_updates_and_clears() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "A");
+    assert_eq!(s.client.get_plan(&id).description, None);
+
+    let uri = s.name("https://example.com/terms");
+    s.client
+        .update_plan_description(&s.merchant, &id, &Some(uri.clone()));
+    assert_eq!(s.client.get_plan(&id).description, Some(uri));
+
+    let new_uri = s.name("https://example.com/terms-v2");
+    s.client
+        .update_plan_description(&s.merchant, &id, &Some(new_uri.clone()));
+    assert_eq!(s.client.get_plan(&id).description, Some(new_uri));
+
+    s.client.update_plan_description(&s.merchant, &id, &None);
+    assert_eq!(s.client.get_plan(&id).description, None);
+}
+
+#[test]
+fn update_plan_description_rejects_non_merchant() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "A");
+    let other = Address::generate(&s.env);
+
+    let result = s.client.try_update_plan_description(
+        &other,
+        &id,
+        &Some(s.name("https://example.com/terms")),
+    );
+    assert_eq!(result, Err(Ok(Error::NotPlanMerchant)));
+}
+
+#[test]
+fn update_plan_description_rejects_too_long_description() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "A");
+    let long = String::from_str(&s.env, &"x".repeat(257));
+
+    let result = s
+        .client
+        .try_update_plan_description(&s.merchant, &id, &Some(long));
+    assert_eq!(result, Err(Ok(Error::InvalidDescription)));
+fn get_plan_subscriber_count_is_zero_for_a_fresh_plan() {
+    let s = Setup::new();
+    let id = s.create(&s.merchant, "Pro");
+    assert_eq!(s.client.get_plan_subscriber_count(&id), 0);
+}
+
+#[test]
+fn get_plan_subscriber_count_fails_for_an_unknown_plan() {
+    let s = Setup::new();
+    expect_err(
+        s.client.try_get_plan_subscriber_count(&9),
+        Error::PlanNotFound,
+    );
 }
