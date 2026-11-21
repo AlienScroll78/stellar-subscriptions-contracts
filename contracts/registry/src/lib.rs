@@ -15,6 +15,9 @@ mod errors;
 mod storage;
 mod types;
 
+/// Version of the registry's interface.
+pub const VERSION: u32 = 1;
+
 pub use errors::Error;
 pub use types::{
     RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
@@ -183,6 +186,11 @@ impl RegistryContract {
         storage::write_stats(&env, &stats);
         storage::bump_instance(&env);
         Ok(())
+    }
+
+    /// Version of this contract.
+    pub fn version() -> u32 {
+        VERSION
     }
 
     /// Current aggregate stats across every indexed plan and subscription.
