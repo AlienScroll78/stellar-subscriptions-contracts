@@ -3,7 +3,7 @@ extern crate std;
 use core::fmt::Debug;
 
 use soroban_sdk::{
-    testutils::{Address as _, Events as _, MockAuth, MockAuthInvoke},
+    testutils::{Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
     Address, Env, Event, IntoVal,
 };
 
@@ -437,4 +437,30 @@ fn rejected_writes_emit_no_events() {
     s.client.update_subscription(&7, &100, &STATUS_ACTIVE);
     assert!(s.client.try_update_subscription(&7, &50, &STATUS_ACTIVE).is_err());
     assert!(s.env.events().all().filter_by_contract(&s.client.address) == std::vec::Vec::new());
+}
+
+#[test]
+fn stats_survive_seven_days_without_writes() {
+    const DAY_IN_LEDGERS: u32 = 17_280;
+    let s = Setup::new();
+    s.register(1);
+    s.register(2);
+    s.client.update_subscription(&2, &300, &STATUS_ACTIVE);
+    let before = s.stats();
+
+    let now = s.env.ledger().sequence();
+    s.env.ledger().set_sequence_number(now + 7 * DAY_IN_LEDGERS);
+
+    // Stats must live in persistent storage, not in the instance entry whose
+    // 7-day TTL is what this change is protecting against.
+    s.env.as_contract(&s.client.address, || {
+        let key = crate::storage::DataKey::Stats;
+        assert!(s.env.storage().persistent().has(&key));
+        assert!(!s.env.storage().instance().has(&key));
+    });
+
+    assert_eq!(s.stats(), before);
+    assert_eq!(s.stats().total_subscriptions, 2);
+    assert_eq!(s.stats().active_subscriptions, 2);
+    assert_eq!(s.stats().total_charged_volume, 300);
 }
