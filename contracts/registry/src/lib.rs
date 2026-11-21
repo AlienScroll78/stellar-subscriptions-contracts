@@ -194,6 +194,10 @@ impl RegistryContract {
     }
 
     /// Current aggregate stats across every indexed plan and subscription.
+    ///
+    /// **Warning:** `total_charged_volume` sums raw token units across all
+    /// tokens with no normalization. Mixing tokens with different decimals
+    /// makes it meaningless as a currency amount. See `docs/registry.md`.
     pub fn get_stats(env: Env) -> RegistryStats {
         storage::read_stats(&env)
     }

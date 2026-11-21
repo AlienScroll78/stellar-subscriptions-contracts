@@ -80,9 +80,11 @@ index can never reach a state the subscription contract could not:
 
 ## Caveats
 
-- `total_charged_volume` adds raw token units across **all tokens**. It is a
-  activity signal, not a currency amount. Per-token volume belongs in an
-  indexer.
+- **Warning: `total_charged_volume` is not a currency amount.** It adds raw
+  token units across **all tokens** with no decimal or price normalization.
+  1 XLM (7 decimals) and 1 USDC (7 decimals) each add their raw units, so
+  mixed-token totals are meaningless as value. Use it only as an activity
+  signal, and take per-token volume from an indexer.
 - `get_active_subscriptions` walks every registered subscription.
 - Plans and subscriptions created before the registry was linked would be
   missing, which is why both the plan and subscription contracts only accept

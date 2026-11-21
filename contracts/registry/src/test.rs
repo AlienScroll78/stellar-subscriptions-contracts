@@ -204,6 +204,20 @@ fn charges_accumulate_volume_by_their_increase() {
 }
 
 #[test]
+fn volume_sums_raw_units_across_tokens_without_normalization() {
+    // The registry has no notion of token. A charge in one token and a
+    // charge in another both add their raw units to the same total.
+    let one_xlm: i128 = 10_000_000; // 1 XLM in stroops (7 decimals)
+    let one_usdc: i128 = 1_000_000; // 1 USDC in its smallest unit (6 decimals)
+    let s = Setup::new();
+    s.register(1);
+    s.register(2);
+    s.client.update_subscription(&1, &one_xlm, &STATUS_ACTIVE);
+    s.client.update_subscription(&2, &one_usdc, &STATUS_ACTIVE);
+    assert_eq!(s.stats().total_charged_volume, one_xlm + one_usdc);
+}
+
+#[test]
 fn total_charged_can_never_decrease() {
     let s = Setup::new();
     s.register(1);
