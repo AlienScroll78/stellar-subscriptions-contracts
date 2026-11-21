@@ -32,6 +32,42 @@ fn subscribe_emits_subscribed() {
             interval_ledgers: INTERVAL,
             total_cap: CAP,
             plan_id: 0,
+            trial_ledgers: 0,
+            expires_at: 0,
+        },
+    );
+}
+
+#[test]
+fn subscribe_with_trial_emits_trial_and_expiry() {
+    let s = Setup::new();
+    let trial = 10u32;
+    let now = s.ledger();
+    let id = s.client.subscribe(
+        &s.subscriber,
+        &s.merchant,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &CAP,
+        &0,
+        &trial,
+        &0,
+    );
+    assert_only_event(
+        &s,
+        Subscribed {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            merchant: s.merchant.clone(),
+            token: s.token.address.clone(),
+            amount_per_period: AMOUNT,
+            interval_ledgers: INTERVAL,
+            total_cap: CAP,
+            plan_id: 0,
+            trial_ledgers: trial,
+            expires_at: now + trial,
+            expires_at: 0,
         },
     );
 }
@@ -77,6 +113,63 @@ fn the_charge_that_reaches_the_cap_reports_exhaustion() {
 }
 
 #[test]
+fn charged_event_token_matches_the_subscriptions_token() {
+    let s = Setup::new();
+    let id = s.subscribe();
+    let now = s.ledger();
+    s.client.charge(&s.merchant, &id);
+
+    let sub = s.sub(id);
+    assert_eq!(sub.token, s.token.address);
+
+fn exhausted_is_false_until_the_final_charge() {
+    let s = Setup::new();
+    // Cap = 3 periods, so the third charge exactly exhausts it.
+    let id = s.subscribe_with(AMOUNT, INTERVAL, 3 * AMOUNT);
+
+    for _ in 0..2 {
+        let now = s.ledger();
+        s.client.charge(&s.merchant, &id);
+        assert_only_event(
+            &s,
+            Charged {
+                subscription_id: id,
+                merchant: s.merchant.clone(),
+                token: s.token.address.clone(),
+                amount: AMOUNT,
+                total_charged: s.sub(id).total_charged,
+                next_charge_ledger: now + INTERVAL,
+                exhausted: false,
+            },
+        );
+        s.advance(INTERVAL);
+    }
+
+    let now = s.ledger();
+    s.client.charge(&s.merchant, &id);
+    assert_only_event(
+        &s,
+        Charged {
+            subscription_id: id,
+            merchant: s.merchant.clone(),
+            token: sub.token.clone(),
+            amount: AMOUNT,
+            total_charged: AMOUNT,
+            next_charge_ledger: now + INTERVAL,
+            exhausted: false,
+        },
+    );
+            token: s.token.address.clone(),
+            amount: AMOUNT,
+            total_charged: 3 * AMOUNT,
+            next_charge_ledger: now + INTERVAL,
+            exhausted: true,
+        },
+    );
+    assert_eq!(s.sub(id).status, crate::SubStatus::Exhausted);
+}
+
+#[test]
 fn cancel_emits_cancelled_with_the_unused_cap() {
     let s = Setup::new();
     let id = s.subscribe();
@@ -91,6 +184,83 @@ fn cancel_emits_cancelled_with_the_unused_cap() {
             unused_cap: CAP - AMOUNT,
             allowance_updated: true,
             registry_updated: true,
+        },
+    );
+}
+
+#[test]
+fn cancel_reports_the_exact_unused_cap_after_a_known_number_of_charges() {
+    let s = Setup::new();
+    let id = s.subscribe_with(60, INTERVAL, 300);
+    s.client.charge(&s.merchant, &id);
+    s.advance(INTERVAL);
+    s.client.charge(&s.merchant, &id);
+    s.client.cancel(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Cancelled {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            total_charged: 120,
+            unused_cap: 180,
+            allowance_updated: true,
+            registry_updated: true,
+        },
+    );
+}
+
+#[test]
+fn cancel_with_no_charges_reports_the_full_cap_as_unused() {
+    let s = Setup::new();
+    let id = s.subscribe_with(AMOUNT, INTERVAL, 100);
+    s.client.cancel(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Cancelled {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            total_charged: 0,
+            unused_cap: 100,
+            allowance_updated: true,
+            registry_updated: true,
+        },
+    );
+}
+
+#[test]
+fn resumed_event_reports_now_when_resumed_after_the_due_date_has_passed() {
+    let s = Setup::new();
+    let id = s.subscribe();
+    s.client.pause(&s.subscriber, &id);
+    // Original next_charge_ledger is start + INTERVAL. Resume well after it.
+    s.set_ledger(s.sub(id).next_charge_ledger + 10);
+    let resumed_at = s.ledger();
+    s.client.resume(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Resumed {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            next_charge_ledger: resumed_at,
+        },
+    );
+}
+
+#[test]
+fn resumed_event_keeps_the_original_due_date_when_resumed_early() {
+    let s = Setup::new();
+    let id = s.subscribe();
+    let original_next = s.sub(id).next_charge_ledger;
+    s.client.pause(&s.subscriber, &id);
+    // Resume before the original due date.
+    s.set_ledger(original_next - 10);
+    s.client.resume(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Resumed {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            next_charge_ledger: original_next,
         },
     );
 }
