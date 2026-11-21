@@ -16,6 +16,7 @@ mod expiry;
 mod hostile_token;
 mod integration;
 mod interval_limits;
+mod reentrant_plan;
 mod new_features;
 mod plan_index;
 mod registry_status;
