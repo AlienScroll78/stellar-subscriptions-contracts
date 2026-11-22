@@ -20,14 +20,16 @@ jobs:
       - name: Install Rust
         run: rustup show
 
-      - name: Cache cargo
+      # Job-scoped exact keys keep coverage and regular build artifacts separate.
+      # A lockfile change creates a cold cache.
+      - name: Cache Cargo dependencies and build artifacts
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
 
       # Tests run first so a formatting nit can never hide a failing
       # invariant test.
@@ -48,14 +50,14 @@ jobs:
       - name: Install Rust
         run: rustup show
 
-      - name: Cache cargo
+      - name: Cache Cargo dependencies and build artifacts
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
@@ -79,14 +81,14 @@ jobs:
       - name: Install Rust
         run: rustup show
 
-      - name: Cache cargo
+      - name: Cache Cargo dependencies and build artifacts
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-fuzz-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
 
       - name: Fuzz CAP, INTERVAL and REVOCATION (500 cases)
         env:
@@ -101,14 +103,14 @@ jobs:
       - name: Install Rust
         run: rustup show
 
-      - name: Cache cargo
+      - name: Cache Cargo dependencies and build artifacts
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-cargo-${{ github.job }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
 
       # Same artifacts as `stellar contract build`, without compiling the
       # Stellar CLI in CI.
