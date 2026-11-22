@@ -86,3 +86,23 @@ against a different registry instance entirely, are simply absent from it
   from events, not by any function in these contracts.
 - No mechanism exists to repoint `plan_contract`, `registry` or `writers`
   after they are first set.
+
+## Bumping the plan contract `VERSION`
+
+`PlanContract::version()` returns `plan::VERSION` (`contracts/plan/src/lib.rs`).
+It is the only on-chain signal clients have that the plan ABI changed, so
+bump it whenever a change is incompatible for existing callers:
+
+- renumbering, removing or reusing an error code or enum discriminant;
+- changing a function signature, argument order or return type;
+- changing the shape of a stored or returned type.
+
+Additive, backwards-compatible changes do not need a bump. To bump:
+
+1. Increment `VERSION` by one. Never reuse a value.
+2. Update `version_is_1` in `contracts/plan/src/test.rs` to the new number;
+   `version_test.rs` already follows the constant.
+3. Record the break in `CHANGELOG.md` and update `docs/errors.json` if codes
+   changed.
+4. Deploy a new plan instance and relink it, since there is no in-place
+   upgrade (see above).
