@@ -148,3 +148,15 @@ Testnet contract ids are in [DEPLOYMENTS.md](DEPLOYMENTS.md).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), in particular the section on adding
 features without weakening the invariants.
+
+## Note to maintainers: register_subscription signature (#251)
+
+The subscription contract's `RegistryInterface::register_subscription`
+(`contracts/subscription/src/interfaces.rs`) and the registry's
+`register_subscription` (`contracts/registry/src/lib.rs`) both take
+`subscription_id, subscriber, merchant, token`, so the signatures are aligned
+on `main`. The end-to-end subscribe-with-registry path is covered by
+`the_registry_mirrors_the_full_lifecycle` in
+`contracts/subscription/src/test/integration.rs`. The only change made is
+removing duplicated `subscriber`/`merchant` fields in the registry's
+`SubscriptionRecord` literal inside `register_subscription`.
