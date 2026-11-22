@@ -861,3 +861,16 @@ fn records_keep_their_own_token_through_updates() {
     assert_eq!(s.client.get_subscription_record(&1).token, s.token);
     assert_eq!(s.client.get_subscription_record(&2).token, other_token);
 }
+
+#[test]
+fn set_writers_accepts_arbitrary_non_contract_addresses() {
+    let s = Setup::unconfigured();
+    // Plain generated account addresses, not deployed contracts.
+    let wallet_a = Address::generate(&s.env);
+    let wallet_b = Address::generate(&s.env);
+    s.client.set_writers(&s.admin, &wallet_a, &wallet_b);
+
+    let writers = s.client.get_writers();
+    assert_eq!(writers.subscription_contract, wallet_a);
+    assert_eq!(writers.plan_contract, wallet_b);
+}
