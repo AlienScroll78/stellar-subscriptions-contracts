@@ -30,7 +30,7 @@ When a subscriber calls `subscribe`, the contract calls `sync`, which:
    already `Cancelled` or `Exhausted`. For one subscription, that is
    `total_cap - total_charged`.
 2. Approves this contract to spend exactly that amount, until an expiry
-   ledger (see "why the expiry is aligned" below).
+   ledger (see "Allowance expiry alignment" below).
 
 ### 2. Charge pulls
 
@@ -89,36 +89,54 @@ assumed), the next `sync` call - from any `subscribe`, `cancel`, or
 `refresh_allowance` - repairs it, because it is always recomputed from
 scratch rather than incremented or decremented.
 
-## Why the expiry is aligned, and what a window boundary does
+## Allowance expiry alignment
 
-A wallet signs the `approve` call with the exact arguments it saw while
-simulating the transaction, including the expiry ledger. The transaction
-then lands a few ledgers later than the simulation. If the expiry were
-computed from "now" at simulation time, by the time the transaction landed
-"now" would have moved on and the expiry baked into the signed call would no
-longer equal what submission computes - so the signature would not match,
-and the call would fail on submission after having passed simulation. This
-is not hypothetical: `allowance.rs`'s doc comment notes it happened on
-Testnet before the fix.
+### The problem: simulation and submission disagree on "now"
 
-The fix is to round the expiry down to the start of a fixed window
-(`EXPIRY_WINDOW = 17_280` ledgers, about a day) before adding the maximum
-TTL:
+A wallet does not sign a transaction blindly. It first *simulates* the call
+against the current ledger to learn what the call will do, then asks the
+subscriber to sign those exact arguments, then submits the signed envelope
+to the network. The signed `approve` therefore carries the expiry ledger
+that was computed at **simulation time**.
+
+By the time the transaction actually lands, the ledger has moved on - a few
+ledgers later, sometimes more. If the expiry were computed as "current
+ledger + max TTL" at each moment, the value baked into the signed call
+(computed at simulation) would no longer equal the value the contract
+recomputes at submission. The signature would not match the arguments, and
+the call would fail on submission even though it passed simulation. This is
+not hypothetical: `allowance.rs`'s doc comment records that this mismatch
+was observed on Testnet before the fix.
+
+### The solution: align expiry to `EXPIRY_WINDOW`
+
+The fix is to round the current ledger down to the start of a fixed window
+before adding the maximum TTL, so that every ledger inside the same window
+produces the *same* expiry:
 
 ```rust
+const EXPIRY_WINDOW: u32 = 17_280; // ~1 day of ledgers
+
 let window_start = now - now % EXPIRY_WINDOW;
 window_start.saturating_add(env.storage().max_ttl()).max(now)
 ```
 
-Within one window, "now" rounds down to the same `window_start` no matter
-when exactly simulation or submission happens, so the expiry computed at
-simulation time matches the expiry computed at submission time, and the
-signature stays valid.
+`EXPIRY_WINDOW = 17_280` ledgers is roughly one day at the network's target
+ledger close time. Within a single window, "now" rounds down to the same
+`window_start` regardless of whether it is evaluated during simulation or
+during submission, so both compute the same expiry and the signature stays
+valid. The `.max(now)` guard keeps the expiry from ever landing in the past
+when `max_ttl` is small relative to the window.
 
-The only case this does not cover is when a window boundary falls *between*
-simulation and submission - the two calls would then round down to
-different `window_start` values and disagree on the expiry. That call fails
-cleanly with `ApprovalFailed` (no state changes) and can simply be retried.
-`contracts/subscription/src/test/simulation_drift.rs` tests `subscribe`,
+### The one remaining edge case
+
+If a window boundary falls *between* simulation and submission, the two
+calls round down to different `window_start` values and disagree on the
+expiry. That call fails cleanly with `ApprovalFailed` and changes no state,
+so the wallet can simply re-simulate and retry. The window makes this rare
+(once per ~day) instead of happening on every transaction that lands a few
+ledgers late.
+
+`contracts/subscription/src/test/simulation_drift.rs` exercises `subscribe`,
 `cancel` and `refresh_allowance` signed several ledgers before they land, to
-cover exactly this.
+cover exactly this scenario.
