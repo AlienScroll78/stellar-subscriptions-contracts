@@ -12,6 +12,7 @@ mod auth;
 mod batch_charge;
 mod charge;
 mod charge_status;
+mod allowance_sync_many_subscriptions;
 mod events;
 mod expiry;
 mod hostile_token;

@@ -29,3 +29,19 @@ subscription contract moves funds.
   but do not prove safety against host implementation defects.
 - No third-party audit has been completed. The contracts are deployed on
   Testnet only; this is documented in [`SECURITY.md`](../SECURITY.md).
+
+## Liveness: orphaned approval when `allowance::sync` fails during `cancel`
+
+`cancel` marks the subscription `Cancelled` first and then calls
+`allowance::sync`, which recomputes the approval by reading every
+subscription in the subscriber's `BySubscriber` index. For a subscriber with
+very many subscriptions this read can approach the transaction budget. If the
+nested `approve` fails, `sync` returns `ApprovalFailed`; `cancel` swallows it
+and reports `allowance_updated = false` in the `Cancelled` event. The
+cancellation (REVOCATION) still holds, but the token allowance keeps its old,
+too-high value (an orphaned approval) until the subscriber touches the
+subscription set again, for example with `refresh_allowance`. This is a
+liveness concern, not a loss of funds: charges are still refused by the
+contract's own checks. A test
+(`allowance_sync_many_subscriptions.rs`) covers the 50-subscription success
+case.
