@@ -29,3 +29,5 @@ mod simulation_drift;
 mod trial;
 mod validation;
 mod views;
+
+mod already_configured;

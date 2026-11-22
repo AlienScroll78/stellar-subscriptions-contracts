@@ -165,3 +165,28 @@ pub fn expect_err<T: Debug, C: Debug, I: Debug>(
         Ok(value) => panic!("expected {expected:?}, but the call succeeded with {value:?}"),
     }
 }
+
+#[cfg(test)]
+mod already_configured_tests {
+    use super::*;
+
+    #[test]
+    fn set_plan_contract_returns_already_configured_after_subscription() {
+        let setup = Setup::new();
+        setup.subscribe();
+
+        let plan = Address::generate(&setup.env);
+        let result = setup.client.try_set_plan_contract(&plan);
+        expect_err(result, Error::AlreadyConfigured);
+    }
+
+    #[test]
+    fn set_registry_returns_already_configured_after_subscription() {
+        let setup = Setup::new();
+        setup.subscribe();
+
+        let registry = Address::generate(&setup.env);
+        let result = setup.client.try_set_registry(&registry);
+        expect_err(result, Error::AlreadyConfigured);
+    }
+}
