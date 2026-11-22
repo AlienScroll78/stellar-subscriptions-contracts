@@ -148,3 +148,8 @@ Testnet contract ids are in [DEPLOYMENTS.md](DEPLOYMENTS.md).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), in particular the section on adding
 features without weakening the invariants.
+
+## Handsoff notes
+
+<!-- handsoff-issue-238 -->
+- #238: Test: initialize called twice on registry and plan contracts returns AlreadyInitialized
