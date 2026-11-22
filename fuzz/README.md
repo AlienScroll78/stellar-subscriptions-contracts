@@ -24,6 +24,9 @@ The fuzz `Op` enum exercises the following paths:
   period, then charge across the trial boundary to exercise the trial-period
   path.
 
+Pull request CI checks that the standalone fuzz crate compiles with
+`cargo +nightly check --manifest-path fuzz/Cargo.toml` from the repository root.
+
 ## Running
 
 ```bash

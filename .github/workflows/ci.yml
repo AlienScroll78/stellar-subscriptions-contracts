@@ -88,6 +88,12 @@ jobs:
             target
           key: ${{ runner.os }}-fuzz-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Install nightly Rust
+        run: rustup toolchain install nightly --profile minimal
+
+      - name: Check standalone fuzz crate
+        run: cargo +nightly check --manifest-path fuzz/Cargo.toml
+
       - name: Fuzz CAP, INTERVAL and REVOCATION (500 cases)
         env:
           PROPTEST_CASES: "500"
