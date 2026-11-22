@@ -14,3 +14,8 @@ contracts/ @stellar-sub/maintainers
 # Documentation and project metadata.
 *.md @stellar-sub/maintainers
 .github/ @stellar-sub/maintainers
+# Error codes and status discriminants are part of the public ABI. Renumbering
+# them is a breaking change, so these files need extra review. Later rules take
+# precedence in CODEOWNERS, so these stay at the end of the file.
+contracts/*/src/errors.rs @stellar-sub/maintainers @stellar-sub/security
+contracts/*/src/types.rs @stellar-sub/maintainers @stellar-sub/security
