@@ -16,6 +16,7 @@ mod allowance_sync_many_subscriptions;
 mod events;
 mod expiry;
 mod hostile_token;
+mod ttl_by_subscriber_keepalive;
 mod integration;
 mod interval_limits;
 mod new_features;
