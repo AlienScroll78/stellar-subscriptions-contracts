@@ -3,6 +3,7 @@ extern crate std;
 use core::fmt::Debug;
 
 use soroban_sdk::{
+    contract, contractimpl,
     testutils::{Address as _, Ledger},
     token::{StellarAssetClient, TokenClient},
     Address, Env,
@@ -34,6 +35,24 @@ pub struct Snapshot {
     pub subscriber_balance: i128,
     pub merchant_balance: i128,
     pub allowance: i128,
+}
+
+/// Minimal merchant contract used to exercise contract-account (C...)
+/// merchants. It forwards `charge` to the subscription contract so the
+/// subscription contract sees the merchant contract as the caller.
+#[contract]
+pub struct MerchantContract;
+
+#[contractimpl]
+impl MerchantContract {
+    pub fn charge(
+        env: Env,
+        subscription: Address,
+        subscription_id: u64,
+    ) -> Result<(), Error> {
+        SubscriptionContractClient::new(&env, &subscription).charge(&subscription_id);
+        Ok(())
+    }
 }
 
 impl Setup {
@@ -77,6 +96,20 @@ impl Setup {
             &amount,
             &interval,
             &cap,
+            &0,
+            &0,
+        )
+    }
+
+    /// Subscribe with an arbitrary merchant address (e.g. a contract account).
+    pub fn subscribe_with_merchant(&self, merchant: &Address) -> u64 {
+        self.client.subscribe(
+            &self.subscriber,
+            merchant,
+            &self.token.address,
+            &AMOUNT,
+            &INTERVAL,
+            &CAP,
             &0,
             &0,
         )

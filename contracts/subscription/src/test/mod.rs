@@ -12,6 +12,7 @@ mod auth;
 mod batch_charge;
 mod charge;
 mod charge_status;
+mod contract_merchant;
 mod events;
 mod expiry;
 mod hostile_token;

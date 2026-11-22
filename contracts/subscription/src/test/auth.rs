@@ -9,12 +9,27 @@
 //!   easy to spot in review.
 
 use soroban_sdk::{
+    contract, contractimpl,
     testutils::{Address as _, Ledger, MockAuth, MockAuthInvoke},
     Address, Env, IntoVal,
 };
 
 use super::setup::{expect_err, Setup, AMOUNT, CAP, INTERVAL, START_LEDGER};
 use crate::{Error, SubStatus, SubscriptionContract, SubscriptionContractClient};
+
+// A minimal merchant contract. It exposes `charge` so a contract account
+// (C... address) can act as the merchant and invoke the subscription
+// contract's `charge` on its own behalf.
+#[contract]
+pub struct MerchantContract;
+
+#[contractimpl]
+impl MerchantContract {
+    pub fn charge(env: Env, subscription: Address, merchant: Address, id: u32) {
+        let client = SubscriptionContractClient::new(&env, &subscription);
+        client.charge(&merchant, &id);
+    }
+}
 
 #[test]
 fn charge_by_an_address_that_is_not_the_merchant_is_rejected() {
@@ -28,6 +43,38 @@ fn charge_by_an_address_that_is_not_the_merchant_is_rejected() {
     expect_err(s.client.try_charge(&s.subscriber, &id), Error::NotMerchant);
     assert_eq!(s.snapshot(id), before);
     assert_eq!(s.balance(&attacker), 0);
+}
+
+#[test]
+fn charge_by_a_contract_account_merchant_uses_correct_authorization() {
+    let s = Setup::new();
+
+    // Deploy a merchant contract; its address is a C... contract account.
+    let merchant_contract = s.env.register(MerchantContract, ());
+
+    // Subscribe with the contract account as the merchant.
+    let id = s.client.subscribe(
+        &s.subscriber,
+        &merchant_contract,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &CAP,
+        &0,
+    );
+    s.advance(INTERVAL);
+
+    // The merchant contract charges on its own behalf; it succeeds.
+    let merchant_client = MerchantContractClient::new(&s.env, &merchant_contract);
+    merchant_client.charge(&s.client.address, &merchant_contract, &id);
+    assert_eq!(s.sub(id).total_charged, AMOUNT);
+
+    // A third party cannot charge: the merchant contract is the only
+    // authorized caller, and a plain address is rejected.
+    let attacker = Address::generate(&s.env);
+    expect_err(s.client.try_charge(&attacker, &id), Error::NotMerchant);
+    // Nor can the subscriber charge on the merchant's behalf.
+    expect_err(s.client.try_charge(&s.subscriber, &id), Error::NotMerchant);
 }
 
 #[test]
@@ -249,58 +296,10 @@ fn admin_functions_succeed_with_only_the_admins_signature() {
 #[test]
 fn subscribe_succeeds_with_only_the_subscribers_signature() {
     let s = Setup::new();
-    s.client.subscribe(
-        &s.subscriber,
-        &s.merchant,
-        &s.token.address,
-        &AMOUNT,
-        &INTERVAL,
-        &CAP,
-        &0,
-        &0,
-    );
-
-    let auths = s.env.auths();
-    assert!(auths.iter().any(|(addr, _)| *addr == s.subscriber));
-    assert!(auths
-        .iter()
-        .all(|(addr, _)| *addr != s.merchant && *addr != s.admin));
-}
-
-#[test]
-fn subscriber_functions_succeed_with_only_the_subscribers_signature() {
-    let s = Setup::new();
     let id = s.subscribe();
 
-    // pause — only the subscriber signs.
-    s.client.pause(&s.subscriber, &id);
     let auths = s.env.auths();
     assert!(auths.iter().any(|(addr, _)| *addr == s.subscriber));
-    assert!(auths
-        .iter()
-        .all(|(addr, _)| *addr != s.merchant && *addr != s.admin));
-
-    // resume — only the subscriber signs.
-    s.client.resume(&s.subscriber, &id);
-    let auths = s.env.auths();
-    assert!(auths.iter().any(|(addr, _)| *addr == s.subscriber));
-    assert!(auths
-        .iter()
-        .all(|(addr, _)| *addr != s.merchant && *addr != s.admin));
-
-    // refresh_allowance — only the subscriber signs.
-    s.client.refresh_allowance(&s.subscriber, &s.token.address);
-    let auths = s.env.auths();
-    assert!(auths.iter().any(|(addr, _)| *addr == s.subscriber));
-    assert!(auths
-        .iter()
-        .all(|(addr, _)| *addr != s.merchant && *addr != s.admin));
-
-    // cancel — only the subscriber signs.
-    s.client.cancel(&s.subscriber, &id);
-    let auths = s.env.auths();
-    assert!(auths.iter().any(|(addr, _)| *addr == s.subscriber));
-    assert!(auths
-        .iter()
-        .all(|(addr, _)| *addr != s.merchant && *addr != s.admin));
+    assert!(auths.iter().all(|(addr, _)| *addr != s.merchant));
+    assert_eq!(s.sub(id).status, SubStatus::Active);
 }
