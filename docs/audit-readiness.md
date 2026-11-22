@@ -1,7 +1,7 @@
 # Audit-readiness checklist
 
 This document collects everything a third-party auditor needs to scope the
-engage­ment, reproduce the build, and understand the security model.
+engagement, reproduce the build, and understand the security model.
 
 ## Scope
 
