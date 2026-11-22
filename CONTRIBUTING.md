@@ -187,6 +187,9 @@ PROPTEST_CASES=500 cargo test -p subscription fuzz
 
 - Keep PRs focused. Invariant-affecting changes should not be mixed with
   refactors.
+- Update `CHANGELOG.md` when your PR changes files under `contracts/`.
+  For documentation-only changes under that directory, a maintainer can
+  apply the `skip-changelog` label to bypass the CI check.
 - CI must be green: tests, clippy, fmt and the wasm build.
 - Changes to `contracts/subscription` need a review that explicitly checks
   the checklist above.
