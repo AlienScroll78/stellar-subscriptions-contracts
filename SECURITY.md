@@ -135,6 +135,30 @@ Procedure:
 
 Result: **pending a Testnet run.**
 
+Exact commands for a maintainer (replace the `<...>` values; nothing below has been run):
+
+```bash
+cd examples/budget-exhausting-token && stellar contract build
+stellar contract deploy --wasm <token.wasm> --source-account <admin> --network testnet
+stellar contract invoke --id <TOKEN> --source-account <admin> --network testnet -- arm
+stellar contract invoke --id <SUB> --source-account <subscriber> --network testnet -- cancel \
+  --subscriber <SUBSCRIBER> --subscription_id <ID>
+```
+
+Result record (TODO: fill in after the Testnet run; no values below are real):
+
+| Field | Value |
+|---|---|
+| Date | TODO |
+| Built from commit | TODO |
+| Hostile token id | TODO |
+| Subscription id | TODO |
+| `cancel` transaction hash | TODO |
+| Outcome (success / failure, exact error) | TODO |
+| Simulated resource usage (CPU instructions, memory, ledger reads/writes) | TODO |
+| Submitted resource usage | TODO |
+| Follow-up issue (required if `cancel` failed) | TODO |
+
 ## Reporting a vulnerability
 
 Please do **not** open a public issue for a security problem. Use GitHub's
