@@ -84,6 +84,44 @@ Mainnet stays undeployed until every blocker below is closed.
 - [ ] Prepare holding statements for incident scenarios — Owner: TBD
 - [ ] Get final approval before any public mainnet announcement — Owner: TBD
 
+## Runbook: Registry misconfiguration
+
+Use this runbook when the registry address was set incorrectly in the
+subscription contract (for example, a typo, the wrong network, or a stale
+contract ID). Because the registry link is written once and cannot be changed
+after it is set, this is a **permanent** misconfiguration for the affected
+contract instance.
+
+### What happens
+
+- Every state-changing call that touches the registry fails with
+  `RegistryUpdateFailed`: `subscribe`, `charge`, `pause` and `resume` all
+  revert. Subscribers cannot be created or modified and charges cannot be
+  processed.
+- `cancel` still works. Cancellation does not depend on the registry link, so
+  subscribers can always cancel their own subscriptions even while the
+  contract is misconfigured.
+- Read-only calls (balances, subscription lookups) continue to work, so the
+  existing state remains inspectable.
+
+### Recovery path
+
+The only recovery is to **deploy fresh instances and migrate subscribers**:
+
+1. Deploy a new subscription contract instance with the correct registry
+   address, following the deployment procedure in section 5.
+2. Record the new contract IDs in [`DEPLOYMENTS.md`](../DEPLOYMENTS.md) and mark
+   the misconfigured instance as deprecated.
+3. Notify subscribers of the new contract address and the migration steps.
+4. Migrate subscribers to the new instance (re-subscribe against the correct
+   registry). Subscribers who no longer wish to continue can `cancel` on the
+   old instance, which still works.
+5. Keep the old instance available for `cancel` and read-only lookups until all
+   subscribers have migrated.
+
+There is no in-place fix: do not attempt to "correct" the registry link on the
+existing instance, as the link cannot be changed once set.
+
 ## Sign-off
 
 Mainnet deployment is approved only when every blocker above is closed and
