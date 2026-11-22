@@ -9,6 +9,8 @@
 //! ones exactly as their subscribers authorized them.
 
 mod errors;
+#[cfg(test)]
+mod registry_integration_test;
 mod storage;
 mod types;
 
