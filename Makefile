@@ -1,4 +1,4 @@
-.PHONY: build wasm wasm-size test clippy fmt fmt-check check clean deploy verify testnet-deploy testnet-integration
+.PHONY: build wasm wasm-size test bench clippy fmt fmt-check check clean deploy verify testnet-deploy testnet-integration
 
 NETWORK ?= testnet
 IDENTITY ?= subs-deployer
@@ -15,6 +15,9 @@ wasm:
 # Run every contract's test suite, including the invariant tests.
 test:
 	cargo test --workspace
+
+bench:
+	cargo bench -p subscription --bench subscription
 
 clippy:
 	cargo clippy --workspace --all-targets -- -D warnings
