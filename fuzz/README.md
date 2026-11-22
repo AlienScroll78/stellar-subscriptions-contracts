@@ -3,7 +3,9 @@
 Coverage-guided fuzzing with [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz).
 The target `entry_points` drives the contract's entry points with arbitrary
 arguments and checks that nothing panics outside a contract error and that
-remaining cap never goes negative.
+remaining cap never goes negative. It also checks that cancel, pause, or
+resume actions by one subscriber never change another subscriber's remaining
+cap.
 
 ## Covered operations
 
@@ -23,6 +25,8 @@ The fuzz `Op` enum exercises the following paths:
 - `SubscribeWithTrial` — create a subscription that starts with a trial
   period, then charge across the trial boundary to exercise the trial-period
   path.
+- Subscriber and merchant addresses are selected from separate four-address
+  pools, allowing actions to cross party boundaries.
 
 ## Running
 
