@@ -30,21 +30,27 @@ The fuzz `Op` enum exercises the following paths:
 
 ## Running
 
+Rustup selects `nightly-2026-11-12` from `fuzz/rust-toolchain.toml` when
+you run Cargo from `fuzz/`. The weekly workflow uses the same pin.
+
+Review the pin quarterly. Update the date in the toolchain file and this
+README, then run the smoke test below and dispatch the Fuzz workflow to
+verify the new toolchain.
+
 ```bash
 cargo install cargo-fuzz --locked
-rustup toolchain install nightly
 cd fuzz
-cargo +nightly fuzz run entry_points -- -max_total_time=60
+cargo fuzz run entry_points -- -max_total_time=60
 ```
 
 For a longer soak (e.g. the 1-hour run described below):
 
 ```bash
-cargo +nightly fuzz run entry_points -- -max_total_time=3600
+cargo fuzz run entry_points -- -max_total_time=3600
 ```
 
 A crash is saved under `fuzz/artifacts/entry_points/`; reproduce it with
-`cargo +nightly fuzz run entry_points <artifact-path>`. A scheduled workflow
+`cargo fuzz run entry_points <artifact-path>`. A scheduled workflow
 (`.github/workflows/fuzz.yml`) runs this weekly for a fixed time and uploads
 any crash as a build artifact.
 
@@ -53,7 +59,7 @@ any crash as a build artifact.
 Command:
 
 ```bash
-cargo +nightly fuzz run entry_points -- -max_total_time=3600
+cargo fuzz run entry_points -- -max_total_time=3600
 ```
 
 Results:
@@ -67,7 +73,7 @@ Results:
 If a future run does surface a crash, reproduce it with:
 
 ```bash
-cargo +nightly fuzz run entry_points fuzz/artifacts/entry_points/<artifact>
+cargo fuzz run entry_points artifacts/entry_points/<artifact>
 ```
 
 and attach the artifact to the issue.
