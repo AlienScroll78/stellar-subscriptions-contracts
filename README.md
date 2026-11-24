@@ -16,6 +16,7 @@ authorized** and **never after the subscriber cancels**.
 - [Testnet](#testnet)
 - [Layout](#layout)
 - [Deployments](#deployments)
+- [FAQ](#faq)
 - [Sister repositories](#sister-repositories)
 - [Contributing](#contributing)
 
@@ -139,6 +140,26 @@ DEPLOYMENTS.md    live contract ids
 
 Testnet contract ids are in [DEPLOYMENTS.md](DEPLOYMENTS.md).
 
+## FAQ
+
+### My merchant says charges are failing — what do I do?
+
+**Symptoms.** The merchant's `charge` call fails with `TransferFailed` (see
+[docs/errors.md](docs/errors.md) for how to read the failed transaction).
+
+**Cause.** The subscriber's token allowance has expired. `charge` pulls funds
+via `transfer_from`, which requires a live allowance from the subscriber to
+the subscription contract. Allowances are time-bounded, so once the allowance
+lapses every subsequent charge fails with `TransferFailed` — even though the
+subscription itself is still active and within its `total_cap`.
+
+**Fix.** The subscriber calls `refresh_allowance` on the subscription contract
+to re-grant the token allowance. The next `charge` then succeeds as normal.
+
+**Nothing is lost.** A failed charge makes no state changes: no balance moves,
+the charged total is unchanged, and the billing interval is not consumed. Once
+the allowance is refreshed, the merchant can charge again on the normal
+schedule — no back-charges or manual reconciliation are needed.
 ## Note to maintainers: issue #239
 
 Issue #239 (re-calling `initialize` with the same admin is rejected) is already
