@@ -286,6 +286,80 @@ fn cancelling_in_one_token_leaves_the_allowance_for_another_token_untouched() {
 }
 
 #[test]
+fn refresh_allowance_is_isolated_per_token_for_a_multi_token_subscriber() {
+    let s = Setup::new();
+    let token_b = s
+        .env
+        .register_stellar_asset_contract_v2(s.admin.clone())
+        .address();
+    StellarAssetClient::new(&s.env, &token_b).mint(&s.subscriber, &START_BALANCE);
+
+    s.subscribe_with(AMOUNT, INTERVAL, 100);
+    s.client.subscribe(
+        &s.subscriber,
+        &s.merchant,
+        &token_b,
+        &AMOUNT,
+        &INTERVAL,
+        &200,
+        &0,
+        &0,
+    );
+
+    let approved_a = s
+        .client
+        .refresh_allowance(&s.subscriber, &s.token.address);
+    assert_eq!(approved_a, 100);
+    assert_eq!(s.allowance(), 100);
+
+    let approved_b = s.client.refresh_allowance(&s.subscriber, &token_b);
+    assert_eq!(approved_b, 200);
+    assert_eq!(
+        TokenClient::new(&s.env, &token_b).allowance(&s.subscriber, &s.client.address),
+        200
+    );
+}
+
+#[test]
+fn cancelling_token_a_and_refreshing_leaves_token_bs_allowance_unchanged() {
+    let s = Setup::new();
+    let token_b = s
+        .env
+        .register_stellar_asset_contract_v2(s.admin.clone())
+        .address();
+    StellarAssetClient::new(&s.env, &token_b).mint(&s.subscriber, &START_BALANCE);
+
+    let in_a = s.subscribe_with(AMOUNT, INTERVAL, 100);
+    s.client.subscribe(
+        &s.subscriber,
+        &s.merchant,
+        &token_b,
+        &AMOUNT,
+        &INTERVAL,
+        &200,
+        &0,
+        &0,
+    );
+    s.client.refresh_allowance(&s.subscriber, &token_b);
+    let token_b_client = TokenClient::new(&s.env, &token_b);
+    assert_eq!(
+        token_b_client.allowance(&s.subscriber, &s.client.address),
+        200
+    );
+
+    // Cancel the token A subscription and refresh token A's allowance.
+    s.client.cancel(&s.subscriber, &in_a);
+    s.client.refresh_allowance(&s.subscriber, &s.token.address);
+
+    assert_eq!(s.allowance(), 0);
+    // Token B's allowance is untouched by token A's cancel and refresh.
+    assert_eq!(
+        token_b_client.allowance(&s.subscriber, &s.client.address),
+        200
+    );
+}
+
+#[test]
 fn a_charge_can_never_exceed_the_allowance_even_if_the_cap_would_allow_it() {
     let s = Setup::new();
     // Cap of 12 periods, but the subscriber only leaves permission for two.
