@@ -28,6 +28,9 @@ The fuzz `Op` enum exercises the following paths:
 - Subscriber and merchant addresses are selected from separate four-address
   pools, allowing actions to cross party boundaries.
 
+Pull request CI checks that the standalone fuzz crate compiles with
+`cargo +nightly check --manifest-path fuzz/Cargo.toml` from the repository root.
+
 ## Running
 
 Rustup selects `nightly-2026-11-12` from `fuzz/rust-toolchain.toml` when
