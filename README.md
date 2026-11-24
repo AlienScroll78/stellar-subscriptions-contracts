@@ -139,6 +139,16 @@ DEPLOYMENTS.md    live contract ids
 
 Testnet contract ids are in [DEPLOYMENTS.md](DEPLOYMENTS.md).
 
+## Note to maintainers: issue #239
+
+Issue #239 (re-calling `initialize` with the same admin is rejected) is already
+covered on `main`. `initialize` returns `AlreadyInitialized` whenever an admin is
+stored, and `initialize_twice_is_rejected` in
+`contracts/subscription/src/test/validation.rs` (also in the subscription test
+for a different admin), `contracts/plan/src/test.rs` and
+`contracts/registry/src/test.rs` calls `try_initialize(&s.admin)` with the
+original admin. No code change is needed.
+
 ## Sister repositories
 
 - Web app: https://github.com/stellar-sub/stellar-subscriptions-web
