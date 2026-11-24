@@ -5,6 +5,7 @@ use soroban_sdk::{contractclient, contracttype, Address, Env, Option, String};
 
 /// Mirror of the plan contract's `Plan`. Contract types are decoded by field
 /// name across contracts, so these names must match that contract exactly.
+/// Must be kept identical - see test::plan_mirror
 #[contracttype(export = false)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Plan {

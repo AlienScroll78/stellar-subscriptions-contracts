@@ -63,3 +63,9 @@ call (for example, charging twice in the same interval).
   intact and error codes are append-only (see `CONTRIBUTING.md`).
 - If a script fails, check that you sourced the deploy environment and that the
   identities above exist and are funded on Testnet.
+## Example contracts must compile on every PR
+
+`budget-exhausting-token/` is a workspace member, so `make check`
+(`cargo test`, `clippy`, `cargo build --workspace`) builds it on every PR.
+A `soroban-sdk` change that breaks it fails CI. Any new example contract
+crate must be added to `members` in the root `Cargo.toml`.

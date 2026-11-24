@@ -36,7 +36,13 @@ for changes to the subscription contract is high. Please read
 | Format | `make fmt` |
 | Build wasm (CLI) | `make build` |
 | Build wasm (cargo only, as CI does) | `make wasm` |
-| Everything CI checks | `make check` |
+| Markdown links and spelling | `make lint-docs` |
+| Core CI checks | `make check` |
+
+Install Node.js with npm and run `pipx install codespell==2.4.1` before
+running `make lint-docs`. Add project vocabulary to
+`.github/docs-words.txt` one word per line.
+
 | Fuzz deeper than the default | `PROPTEST_CASES=500 cargo test -p subscription fuzz` |
 | Prove the invariants on the live deployment | `make verify` (after `DEMO=1 make deploy`) |
 | Deploy to Testnet | `make deploy` |
@@ -195,3 +201,14 @@ PROPTEST_CASES=500 cargo test -p subscription fuzz
 
 - Web app: https://github.com/stellar-sub/stellar-subscriptions-web
 - API + Docs: https://github.com/stellar-sub/stellar-subscriptions-api-docs
+
+## Review of error codes and status discriminants
+
+`contracts/*/src/errors.rs` (the `#[repr(u32)]` error codes) and
+`contracts/*/src/types.rs` (such as the `SubStatus` discriminants) are part of
+the public ABI. Clients, indexers and `docs/errors.json` depend on the exact
+numeric values, so renumbering or reusing a value is a breaking change.
+`.github/CODEOWNERS` therefore requests review from both
+`@stellar-sub/maintainers` and `@stellar-sub/security` for these files. CODEOWNERS
+only requests reviewers: to require two approvals, enable "Require review from
+Code Owners" and at least 2 required approvals in the branch protection rules.

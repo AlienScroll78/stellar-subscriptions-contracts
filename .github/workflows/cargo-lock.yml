@@ -1,0 +1,24 @@
+name: Cargo.lock
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        run: rustup show
+
+      - name: Cargo.lock is tracked
+        run: git ls-files --error-unmatch Cargo.lock
+
+      - name: Build must not modify Cargo.lock
+        run: |
+          cargo build --workspace --locked
+          git diff --exit-code -- Cargo.lock

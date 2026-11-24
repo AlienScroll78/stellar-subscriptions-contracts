@@ -1,0 +1,27 @@
+name: audit-readiness
+
+on:
+  pull_request:
+    paths:
+      - "contracts/*/src/**"
+      - "docs/audit-readiness.md"
+
+permissions:
+  contents: read
+
+jobs:
+  entry-points:
+    name: audit-readiness.md is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Warn when new entry points are added without updating docs/audit-readiness.md
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          added="$(git diff "$base"...HEAD -U0 -- 'contracts/*/src/lib.rs' | grep -E '^\+\s*pub fn ' || true)"
+          if [ -n "$added" ] && ! git diff --name-only "$base"...HEAD | grep -qx 'docs/audit-readiness.md'; then
+            echo "::warning file=docs/audit-readiness.md::New public entry points were added but docs/audit-readiness.md was not updated."
+            echo "$added"
+          fi

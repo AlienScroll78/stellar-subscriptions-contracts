@@ -5,6 +5,7 @@ members = [
   "contracts/plan",
   "contracts/registry",
   "contracts/subscription",
+  "examples/budget-exhausting-token",
 ]
 
 [workspace.dependencies]

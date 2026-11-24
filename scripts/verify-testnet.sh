@@ -10,6 +10,9 @@
 #   pause       a charge while paused                          -> #15
 #   REVOCATION  a charge, pause, resume or cancel after cancel -> #14
 #   CAP         a charge that would pass the cap               -> #12
+#   BATCH_CHARGE  one batch_charge over 3 subscriptions charges all 3
+#   MERCHANT_END  a charge after merchant_end                      -> #28
+#   EXPIRY        a charge after a subscribe_until expiry          -> #28
 #
 # Usage:  ./scripts/verify-testnet.sh        (after DEMO=1 ./scripts/deploy.sh)
 #
@@ -149,6 +152,50 @@ left="$(view remaining_cap --subscription_id "$B" | tr -d '"')"
 chargeable="$(view is_chargeable --subscription_id "$B")"
 [[ "$chargeable" == false ]] && record ok "is_chargeable agrees: false" || record fail "is_chargeable says $chargeable"
 expect_ok "subscriber cancels the leftover" "$SUBSCRIBER_ID" cancel --subscriber "$DEMO_SUBSCRIBER" --subscription_id "$B"
+
+echo
+echo "== BATCH_CHARGE (3 subscriptions, interval 100,000 ledgers, one batch_charge call)"
+BA="$(new_subscription 100000 $((3 * PERIOD)))"
+BB="$(new_subscription 100000 $((3 * PERIOD)))"
+BC="$(new_subscription 100000 $((3 * PERIOD)))"
+echo "  subscriptions #$BA #$BB #$BC created"
+expect_ok "batch_charge of 3 subscriptions" "$MERCHANT_ID" batch_charge --merchant "$DEMO_MERCHANT" --ids "[$BA,$BB,$BC]"
+for id in "$BA" "$BB" "$BC"; do
+  charged="$(field "$id" total_charged)"
+  [[ "$charged" == "$PERIOD" ]] && record ok "#$id charged exactly one period by the batch" || record fail "#$id total charged is $charged, expected $PERIOD"
+done
+for id in "$BA" "$BB" "$BC"; do
+  expect_ok "subscriber cancels #$id" "$SUBSCRIBER_ID" cancel --subscriber "$DEMO_SUBSCRIBER" --subscription_id "$id"
+done
+
+echo
+echo "== MERCHANT_END (charge must fail after the merchant ends a subscription)"
+# Error code 28 is SubscriptionMerchantEnded (see contracts/subscription/src/errors.rs).
+M="$(new_subscription 100000 $((3 * PERIOD)))"
+echo "  subscription #$M created"
+expect_ok "merchant ends the subscription" "$MERCHANT_ID" merchant_end --merchant "$DEMO_MERCHANT" --subscription_id "$M"
+expect_reject 28 "MERCHANT_END: charge after merchant_end" "$MERCHANT_ID" charge --merchant "$DEMO_MERCHANT" --subscription_id "$M"
+status="$(field "$M" status)"
+[[ "$status" == 4 ]] && record ok "status is MerchantEnded (4)" || record fail "status is $status, expected 4"
+
+echo
+echo "== EXPIRY (subscribe_until, charge must fail with SubscriptionExpired after expires_at)"
+# Error code 28 is SubscriptionExpired (see contracts/subscription/src/errors.rs).
+RPC_URL="${RPC_URL:-https://soroban-testnet.stellar.org}"
+current_ledger() {
+  curl -s -X POST "$RPC_URL" -H 'Content-Type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' |
+    python3 -c "import json,sys; print(json.load(sys.stdin)['result']['sequence'])"
+}
+EXPIRES_AT=$(($(current_ledger) + 30)) # about 150 seconds ahead
+E="$(sub "$SUBSCRIBER_ID" subscribe_until \
+  --subscriber "$DEMO_SUBSCRIBER" --merchant "$DEMO_MERCHANT" --token "$DEMO_TOKEN" \
+  --amount_per_period "$PERIOD" --interval_ledgers 1 --total_cap $((3 * PERIOD)) \
+  --plan_id 0 --expires_at "$EXPIRES_AT" | tail -n 1 | tr -d '"')"
+echo "  subscription #$E created, expires at ledger $EXPIRES_AT"
+expect_ok "charge before expiry succeeds" "$MERCHANT_ID" charge --merchant "$DEMO_MERCHANT" --subscription_id "$E"
+while [[ "$(current_ledger)" -lt "$EXPIRES_AT" ]]; do sleep 5; done
+expect_reject 28 "EXPIRY: charge after expires_at" "$MERCHANT_ID" charge --merchant "$DEMO_MERCHANT" --subscription_id "$E"
 
 echo
 echo "Result: $PASSED passed, $FAILED failed"
