@@ -251,6 +251,14 @@ PROPTEST_CASES=500 cargo test -p subscription fuzz
 
 ## Pull requests
 
+- Keep PRs focused. Invariant-affecting changes should not be mixed with
+  refactors.
+- Update `CHANGELOG.md` when your PR changes files under `contracts/`.
+  For documentation-only changes under that directory, a maintainer can
+  apply the `skip-changelog` label to bypass the CI check.
+- CI must be green: tests, clippy, fmt and the wasm build.
+- Changes to `contracts/subscription` need a review that explicitly checks
+  the checklist above.
 - Keep PRs focused on a single issue.
 - Include a clear description of the change and how it was verified.
 - Ensure CI passes before requesting review.

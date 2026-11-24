@@ -1,0 +1,30 @@
+name: Changelog
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Require a changelog entry for contract changes
+        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          contract_changes=$(git diff --name-only --no-renames "$BASE_SHA...$HEAD_SHA" -- contracts/)
+          changelog_changes=$(git diff --name-only --no-renames --diff-filter=AM "$BASE_SHA...$HEAD_SHA" -- CHANGELOG.md)
+          if [[ -n "$contract_changes" && -z "$changelog_changes" ]]; then
+            echo "::error file=CHANGELOG.md::Update CHANGELOG.md when changing contracts. For documentation-only PRs, a maintainer can apply the skip-changelog label."
+            exit 1
+          fi
