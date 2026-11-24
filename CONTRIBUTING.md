@@ -1,5 +1,6 @@
 # Contributing
 
+Thanks for your interest in contributing! This document covers the basics.
 Thanks for helping improve this project. This document covers code style, the
 pull request process, and the workflow for extending the contracts.
 
@@ -60,8 +61,11 @@ Thanks for helping. This repository holds money-moving contracts, so the bar
 for changes to the subscription contract is high. Please read
 [The invariants](#the-invariants) before opening a PR.
 
-## Local setup
+## Getting started
 
+1. Fork the repository and create a branch from `main`.
+2. Make your change with tests where appropriate.
+3. Open a pull request describing the change and linking the related issue.
 1. **Rust.** Install [rustup](https://rustup.rs). The pinned toolchain,
    the `wasm32v1-none` target, `rustfmt` and `clippy` are installed
    automatically from `rust-toolchain.toml` the first time you run `cargo`.
@@ -247,14 +251,17 @@ PROPTEST_CASES=500 cargo test -p subscription fuzz
 
 ## Pull requests
 
-- Keep PRs focused. Invariant-affecting changes should not be mixed with
-  refactors.
-- CI must be green: tests, clippy, fmt and the wasm build.
-- Changes to `contracts/subscription` need a review that explicitly checks
-  the checklist above.
+- Keep PRs focused on a single issue.
+- Include a clear description of the change and how it was verified.
+- Ensure CI passes before requesting review.
 
-## Sister repositories
+## WASM size budget
 
+Contract WASM sizes are limited by `.github/wasm-size-budget.json`. If your
+change increases a contract's size, follow the process in
+[`docs/wasm-size-budget.md`](docs/wasm-size-budget.md): update the budget in the
+same PR and include a justification comment. Budget increases above the warn
+threshold require maintainer approval.
 - Web app: https://github.com/stellar-sub/stellar-subscriptions-web
 - API + Docs: https://github.com/stellar-sub/stellar-subscriptions-api-docs
 

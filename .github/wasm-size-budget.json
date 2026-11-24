@@ -1,5 +1,6 @@
 {
-  "_comment": "Per-contract wasm size budgets in bytes. Raising a budget requires a PR comment explaining why the growth is intentional. Update with: make wasm && scripts/check-wasm-size.sh --update",
+  "_comment": "Per-contract wasm size budgets in bytes. Raising a budget requires a PR comment explaining why the growth is intentional. Update with: make wasm && scripts/check-wasm-size.sh --update. See docs/wasm-size-budget.md.",
+  "warn_threshold_bytes": 1024,
   "contracts": {
     "subscription": {
       "budget_bytes": 65536,

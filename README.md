@@ -180,6 +180,10 @@ original admin. No code change is needed.
 See [CONTRIBUTING.md](CONTRIBUTING.md), in particular the section on adding
 features without weakening the invariants.
 
+## Handsoff notes
+
+<!-- handsoff-issue-238 -->
+- #238: Test: initialize called twice on registry and plan contracts returns AlreadyInitialized
 ## Note to maintainers: register_subscription signature (#251)
 
 The subscription contract's `RegistryInterface::register_subscription`

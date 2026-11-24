@@ -12,6 +12,7 @@ mod auth;
 mod batch_charge;
 mod charge;
 mod charge_status;
+mod contract_merchant;
 mod allowance_sync_many_subscriptions;
 mod events;
 mod expiry;
@@ -31,4 +32,6 @@ mod simulation_drift;
 mod trial;
 mod validation;
 mod views;
+
+mod already_configured;
 mod plan_mirror;

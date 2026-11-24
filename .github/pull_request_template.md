@@ -24,6 +24,7 @@ Closes #
 - [ ] Error codes are append-only (no existing code removed or renumbered).
 - [ ] `make check` passes locally.
 - [ ] Documentation is updated where behaviour changed.
+- [ ] If `.github/wasm-size-budget.json` changed, a justification comment is included (see [docs/wasm-size-budget.md](../docs/wasm-size-budget.md)).
 - [ ] Update `docs/audit-readiness.md` if new entry points were added.
 
 ## Notes for reviewers
