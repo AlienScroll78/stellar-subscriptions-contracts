@@ -80,6 +80,25 @@ merchant, the admin, the token or the registry — can block or undo it. See
 the **REVOCATION** invariant in
 [docs/subscription.md](subscription.md#the-three-invariants).
 
+## MerchantEnded
+
+A terminal subscription status set when the merchant ends the subscription
+itself (rather than the subscriber cancelling), after which no further
+charges succeed.
+
+## Trial period
+
+A free window at the start of a subscription, recorded in `trial_ledgers`,
+during which `charge` is rejected so the first real charge is delayed until
+the trial has elapsed.
+
+## Expiry ledger
+
+A subscription's optional end, stored as `expires_at`: once the ledger
+sequence passes it, the subscription is no longer chargeable. `subscribe_until`
+sets that expiry ledger when subscribing, bounding how long the subscription
+can keep charging.
+
 ## Plan
 
 A merchant-published template of billing terms (token, amount, interval, a

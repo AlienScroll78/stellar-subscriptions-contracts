@@ -173,6 +173,9 @@ error. Quick-reference table:
 | 26 | `RegistryUpdateFailed` | The linked registry rejected the update. |
 | 27 | `InvalidExpiry` | End ledger is not in the future. |
 | 28 | `SubscriptionExpired` | The subscription's end ledger has passed. |
+| 29 | `SubscriptionMerchantEnded` | The merchant ended the subscription; no further charges allowed. |
+| 30 | `BatchTooLarge` | A batch operation exceeded the maximum number of items allowed. |
+| 31 | `PageSizeTooLarge` | A paginated query requested more entries than the maximum page size. |
 
 ---
 
@@ -193,6 +196,8 @@ error. Quick-reference table:
 | 11 | `Overflow` | |
 | 12 | `AlreadyConfigured` | |
 | 13 | `RegistryUpdateFailed` | |
+| 14 | `BatchTooLarge` | A batch operation exceeded the maximum number of items allowed. |
+| 15 | `PageSizeTooLarge` | A paginated query requested more entries than the maximum page size. |
 
 ---
 
@@ -212,6 +217,8 @@ error. Quick-reference table:
 | 10 | `AlreadyFinal` | Cannot update a Cancelled or Exhausted subscription. |
 | 11 | `Overflow` | |
 | 12 | `PlanAlreadyRegistered` | |
+| 13 | `BatchTooLarge` | A batch operation exceeded the maximum number of items allowed. |
+| 14 | `PageSizeTooLarge` | A paginated query requested more entries than the maximum page size. |
 
 ---
 
@@ -237,22 +244,4 @@ subscription to see when the next charge is due:
 stellar contract invoke \
   --id <CONTRACT_ID> \
   --network testnet \
-  -- get_subscription \
-  --subscription_id 1
-```
-
-Look for `next_charge_ledger` in the output and compare with the current
-ledger number from Horizon (`/ledgers?order=desc&limit=1`).
-
-### "Error(Contract, #14) — SubscriptionCancelled"
-
-The subscriber cancelled. This is final and irreversible. The merchant must
-ask the subscriber to create a new subscription.
-
----
-
-## Further reading
-
-- Full subscription contract reference: [docs/subscription.md](subscription.md)
-- Security model and invariants: [CONTRIBUTING.md](../CONTRIBUTING.md#the-invariants)
-- Testnet deployment IDs: [DEPLOYMENTS.md](../DEPLOYMENTS.md)
+  -- g

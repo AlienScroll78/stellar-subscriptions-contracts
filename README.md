@@ -160,6 +160,15 @@ to re-grant the token allowance. The next `charge` then succeeds as normal.
 the charged total is unchanged, and the billing interval is not consumed. Once
 the allowance is refreshed, the merchant can charge again on the normal
 schedule — no back-charges or manual reconciliation are needed.
+## Note to maintainers: issue #239
+
+Issue #239 (re-calling `initialize` with the same admin is rejected) is already
+covered on `main`. `initialize` returns `AlreadyInitialized` whenever an admin is
+stored, and `initialize_twice_is_rejected` in
+`contracts/subscription/src/test/validation.rs` (also in the subscription test
+for a different admin), `contracts/plan/src/test.rs` and
+`contracts/registry/src/test.rs` calls `try_initialize(&s.admin)` with the
+original admin. No code change is needed.
 
 ## Sister repositories
 
@@ -170,3 +179,15 @@ schedule — no back-charges or manual reconciliation are needed.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), in particular the section on adding
 features without weakening the invariants.
+
+## Note to maintainers: register_subscription signature (#251)
+
+The subscription contract's `RegistryInterface::register_subscription`
+(`contracts/subscription/src/interfaces.rs`) and the registry's
+`register_subscription` (`contracts/registry/src/lib.rs`) both take
+`subscription_id, subscriber, merchant, token`, so the signatures are aligned
+on `main`. The end-to-end subscribe-with-registry path is covered by
+`the_registry_mirrors_the_full_lifecycle` in
+`contracts/subscription/src/test/integration.rs`. The only change made is
+removing duplicated `subscriber`/`merchant` fields in the registry's
+`SubscriptionRecord` literal inside `register_subscription`.
