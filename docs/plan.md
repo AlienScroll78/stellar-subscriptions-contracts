@@ -71,6 +71,52 @@ an error: the call returns an empty `Vec`. Callers that need to distinguish
 call `get_plans_by_merchant` (or an indexer) to learn the total count, or
 simply stop paging when an empty page is returned.
 
+## Plans by token
+
+`create_plan` records every plan in a `ByToken(token)` index in addition to
+the per-merchant index. This lets callers list all plans that bill in a given
+token (across merchants) without scanning the whole catalogue. The index is
+append-only: plans are added when created and are never removed, so a token's
+listing includes both active and inactive plans, oldest first.
+
+Use `get_plans_by_token(token, offset, limit)` to page through that index:
+
+- `token` — the token address to filter by.
+- `offset` — zero-based index of the first plan to return. Must be `<` the
+  number of plans for the token; an `offset` at or past the end returns an
+  empty `Vec` rather than an error.
+- `limit` — maximum number of plans to return. Must be non-zero and at most
+  `MAX_PAGE_SIZE`; otherwise the call fails with `InvalidPageSize`.
+
+Results are ordered oldest first (by plan ID). To page through every plan for
+a token, start at `offset = 0` and advance by `limit` until an empty page is
+returned.
+
+### Worked example
+
+List the first two plans that bill in a given token, then the next page:
+
+```sh
+# First page: up to 2 plans for the token, oldest first.
+stellar contract invoke \
+  --id $PLAN_CONTRACT \
+  -- get_plans_by_token \
+  --token $TOKEN \
+  --offset 0 \
+  --limit 2
+
+# Next page: skip the first 2 plans.
+stellar contract invoke \
+  --id $PLAN_CONTRACT \
+  -- get_plans_by_token \
+  --token $TOKEN \
+  --offset 2 \
+  --limit 2
+```
+
+If the token has only two plans, the second call returns an empty list (not an
+error), which signals the end of the listing.
+
 ## What deactivation does and does not do
 
 - New `subscribe` calls naming the plan fail with `PlanInactive`.

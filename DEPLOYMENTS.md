@@ -91,6 +91,36 @@ stellar contract invoke --id $REG --network testnet --source-account <any-identi
 To confirm the deployed code matches this repository, check out `a746709`,
 run `stellar contract build`, and compare the wasm hashes above.
 
+## Pending: redeployment of current HEAD (not yet done)
+
+**Status: NOT deployed. No ids or hashes below are real.** The deployment above
+(commit `a746709`) predates `trial_ledgers`, `subscribe_until`, `batch_charge`,
+`merchant_end` and other additions. A maintainer with Testnet access should
+redeploy and fill in this section, then move the current deployment into
+"Superseded".
+
+```bash
+git rev-parse --short HEAD
+make wasm
+sha256sum target/wasm32v1-none/release/*.wasm
+DEMO=1 ./scripts/deploy.sh
+make verify
+```
+
+| | |
+|---|---|
+| Deployed | TODO |
+| Built from | TODO (commit) |
+| Toolchain | TODO |
+
+| Contract | Contract id | Wasm hash |
+|---|---|---|
+| Subscription | TODO | TODO |
+| Plan | TODO | TODO |
+| Registry | TODO | TODO |
+
+`make verify` result: TODO (paste the `Result: N passed, M failed` line).
+
 ## Superseded Testnet deployments — do not use
 
 Both were built before commit `a746709` and contain the allowance-expiry bug

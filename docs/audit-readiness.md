@@ -1,7 +1,7 @@
 # Audit-readiness checklist
 
 This document collects everything a third-party auditor needs to scope the
-engage­ment, reproduce the build, and understand the security model.
+engagement, reproduce the build, and understand the security model.
 
 ## Scope
 
@@ -96,6 +96,28 @@ pause / resume / cancel and asserts all three after every step.
 
 See [docs/subscription.md](subscription.md#who-may-call-what) for the full
 function-level table.
+
+## Entry points in scope
+
+Public functions of the subscription contract (`contracts/subscription/src/lib.rs`)
+at the time of writing. Keep this list current: update it whenever a PR adds,
+renames or removes an entry point (see the PR template checklist).
+
+| Group | Functions |
+|---|---|
+| Setup (admin, once each) | `initialize`, `set_plan_contract`, `set_registry` |
+| Subscriber | `subscribe`, `subscribe_simple`, `subscribe_until`, `pause`, `resume`, `cancel`, `cancel_all`, `refresh_allowance` |
+| Merchant | `charge`, `batch_charge`, `batch_charge_soft`, `merchant_end`, `associate_plan` |
+| Views | `get_plan_contract`, `get_registry`, `get_admin`, `get_subscription`, `get_subscription_by_id`, `is_chargeable`, `charge_status`, `remaining_cap`, `get_by_subscriber`, `get_by_merchant`, `get_subscription_count`, `get_subscription_count_by_subscriber`, `get_subscription_count_by_merchant`, `get_subscription_summary`, `get_by_subscriber_page`, `get_by_merchant_page`, `count_by_plan`, `get_by_plan`, `get_by_plan_page` |
+
+Additions since v0.1.0 that the auth table above also covers: `subscribe_until`
+(expiry), `batch_charge` / `batch_charge_soft`, `merchant_end` (merchant can end
+a subscription; final), and `cancel_all`. The `.github/workflows/audit-readiness.yml`
+check warns on pull requests that add a `pub fn` without touching this file.
+
+**Not refreshed here:** the "Commit under review" row and the deployed ids still
+point at the older Testnet deployment (see [DEPLOYMENTS.md](../DEPLOYMENTS.md));
+a maintainer should update them when a new deployment is recorded.
 
 ## Known limits and open questions
 
