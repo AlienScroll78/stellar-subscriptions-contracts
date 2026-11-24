@@ -284,3 +284,25 @@ fn an_exhausted_subscription_is_final() {
         Error::SubscriptionExhausted,
     );
 }
+
+#[test]
+fn set_plan_contract_after_a_subscription_is_rejected() {
+    let s = Setup::new();
+    s.subscribe();
+    let plan = Address::generate(&s.env);
+    expect_err(
+        s.client.try_set_plan_contract(&s.admin, &plan),
+        Error::AlreadyConfigured,
+    );
+}
+
+#[test]
+fn set_registry_after_a_subscription_is_rejected() {
+    let s = Setup::new();
+    s.subscribe();
+    let registry = Address::generate(&s.env);
+    expect_err(
+        s.client.try_set_registry(&s.admin, &registry),
+        Error::AlreadyConfigured,
+    );
+}

@@ -1,4 +1,5 @@
-.PHONY: build wasm wasm-size test clippy fmt fmt-check check clean deploy verify testnet-deploy testnet-integration
+.PHONY: build wasm wasm-size test bench clippy fmt fmt-check check clean deploy verify testnet-deploy testnet-integration
+.PHONY: build wasm wasm-size test clippy fmt fmt-check lint-docs check clean deploy verify testnet-deploy testnet-integration
 
 NETWORK ?= testnet
 IDENTITY ?= subs-deployer
@@ -16,6 +17,9 @@ wasm:
 test:
 	cargo test --workspace
 
+bench:
+	cargo bench -p subscription --bench subscription
+
 clippy:
 	cargo clippy --workspace --all-targets -- -D warnings
 
@@ -32,8 +36,13 @@ fmt-check:
 wasm-size:
 	bash scripts/check-wasm-size.sh
 
-# Everything CI checks, in CI's order.
-check: test clippy fmt-check wasm wasm-size
+# Check Markdown links and spelling (requires npm and codespell 2.4.1).
+lint-docs:
+	find docs -type f -name '*.md' -exec npm exec --yes --package=markdown-link-check@3.15.0 -- markdown-link-check --quiet {} +
+	find docs -type f -name '*.md' -exec codespell --ignore-words .github/docs-words.txt {} +
+
+# Core CI checks, in CI's order.
+check: test clippy fmt-check wasm wasm-size lint-docs
 
 clean:
 	cargo clean

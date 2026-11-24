@@ -6,6 +6,8 @@ use soroban_sdk::{contracttype, Address, String};
 ///
 /// Field names are part of the interface: the subscription contract reads
 /// plans across contracts and decodes them by name.
+///
+/// Must be kept identical - see test::plan_mirror
 // `contracttype` generates an undocumentable associated function from this
 // struct; its own fields are still documented below.
 #[allow(missing_docs)]

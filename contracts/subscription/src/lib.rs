@@ -98,6 +98,7 @@ impl SubscriptionContract {
     /// so the first charge is available immediately. Use this from scripts or
     /// clients compiled against the pre-trial ABI.
     #[allow(clippy::too_many_arguments)]
+    #[must_use]
     pub fn subscribe_simple(
         env: Env,
         subscriber: Address,
@@ -130,6 +131,7 @@ impl SubscriptionContract {
     /// The first charge is available immediately. Also approves this contract
     /// to spend the subscriber's outstanding cap in `token`.
     #[allow(clippy::too_many_arguments)]
+    #[must_use]
     pub fn subscribe(
         env: Env,
         subscriber: Address,
@@ -160,6 +162,7 @@ impl SubscriptionContract {
     ///
     /// `expires_at` must be strictly in the future; 0 means no expiry.
     #[allow(clippy::too_many_arguments)]
+    #[must_use]
     pub fn subscribe_until(
         env: Env,
         subscriber: Address,
@@ -449,6 +452,7 @@ impl SubscriptionContract {
     /// roll back the others. The result vector is positionally aligned with
     /// `ids`. At most `MAX_BATCH` ids are accepted; a larger batch returns a
     /// single `Err(BatchTooLarge)` and charges nothing.
+    #[must_use]
     pub fn batch_charge_soft(
         env: Env,
         merchant: Address,
@@ -526,6 +530,7 @@ impl SubscriptionContract {
     /// Final subscriptions in `token` are simply skipped, not errored, so
     /// callers do not need to filter their own list first. Returns the ids
     /// that were actually cancelled.
+    #[must_use]
     pub fn cancel_all(env: Env, subscriber: Address, token: Address) -> Result<Vec<u64>, Error> {
         subscriber.require_auth();
         let ids = storage::read_index(&env, &storage::DataKey::BySubscriber(subscriber.clone()));
@@ -675,6 +680,7 @@ impl SubscriptionContract {
     /// subscriber calls this. It cannot raise any subscription's cap: the
     /// amount is recomputed from contract state, and `charge` enforces each
     /// cap itself regardless of the allowance.
+    #[must_use]
     pub fn refresh_allowance(env: Env, subscriber: Address, token: Address) -> Result<i128, Error> {
         subscriber.require_auth();
         let amount = allowance::sync(&env, &subscriber, &token)?;

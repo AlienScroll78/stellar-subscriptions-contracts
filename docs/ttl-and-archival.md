@@ -196,3 +196,19 @@ touched entries, so a subscription that is used regularly does not archive.
 To guard a deployment with long billing cycles, call a read-only entry point
 such as `get_subscription` at least once a month for each subscription, or
 run `charge` on each billing date.
+
+
+## `BySubscriber` keepalive during `cancel`
+
+`allowance::outstanding` reads `BySubscriber(subscriber)` through
+`storage::read_index`, which extends that entry's TTL on every read. So
+`cancel` (via `allowance::sync`) already bumps the index before computing the
+allowance. On a live network an archived entry must be restored before the
+transaction can touch it, so `read_index` does not silently see an empty list
+for an archived index; an empty result only occurs for an index that never
+existed. The scenario in issue #242 (allowance zeroed for other subscriptions)
+was therefore not confirmed by reading the code, and no contract change was
+made. `ttl_by_subscriber_keepalive.rs` tests that `cancel` extends the index TTL
+and leaves the allowance for the remaining subscriptions intact. The residual
+risk is a subscriber whose index has been archived and who does not restore it;
+the existing monthly `refresh_allowance` guidance above covers it.

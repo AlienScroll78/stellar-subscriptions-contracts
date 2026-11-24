@@ -79,3 +79,19 @@ second time. It is a lifecycle-misuse case, so it belongs in
 The same pattern applies in `contracts/plan/src/test.rs` and
 `contracts/registry/src/test.rs`, which are single files rather than a
 `test/` directory, since those contracts are smaller.
+
+## Subscription benchmarks
+
+Run `make bench` to measure the native Soroban test host with Criterion.
+The fixture creates 100 subscriptions for one subscriber. The charge
+benchmarks use fresh fixtures and exclude setup from the timed operation.
+
+| Benchmark | Operation | Baseline |
+|---|---|---|
+| `charge` | Charge the latest subscription once | Pending a successful build |
+| `batch_charge/20` | Charge the latest 20 subscriptions in one call | Pending a successful build |
+| `get_by_subscriber/100` | Read all 100 subscriptions | Pending a successful build |
+
+Record Criterion's time estimates alongside the commit, Rust version and
+hardware used for the run. These measurements describe native host latency.
+Soroban transaction CPU and memory limits require separate budget measurements.
