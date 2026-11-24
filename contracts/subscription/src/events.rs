@@ -4,7 +4,7 @@
 //! Each event's first topic is its snake_case name (`subscribed`, `charged`,
 //! ...), followed by the subscription id and the party that acted.
 
-use soroban_sdk::{contractevent, Address};
+use soroban_sdk::{contractevent, Address, String};
 
 /// A subscriber granted a new authorization.
 #[contractevent]
