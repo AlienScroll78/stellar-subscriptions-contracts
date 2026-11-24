@@ -19,16 +19,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install nightly Rust
-        run: rustup toolchain install nightly --profile minimal
-
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
+
+      - name: Install pinned nightly Rust
+        working-directory: fuzz
+        run: rustup show
 
       # Fails the job if the fuzzer finds a crash.
       - name: Fuzz entry points
         working-directory: fuzz
-        run: cargo +nightly fuzz run entry_points -- -max_total_time=${{ github.event.inputs.seconds || '600' }}
+        run: cargo fuzz run entry_points -- -max_total_time=${{ github.event.inputs.seconds || '600' }}
 
       - name: Upload crashes
         if: failure()

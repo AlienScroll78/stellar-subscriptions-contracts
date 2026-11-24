@@ -9,6 +9,8 @@
 //! ones exactly as their subscribers authorized them.
 
 mod errors;
+#[cfg(test)]
+mod registry_integration_test;
 mod storage;
 mod types;
 
@@ -494,3 +496,9 @@ impl PlanContract {
 
 #[cfg(test)]
 mod test;
+
+#[cfg(test)]
+mod errors_json_test;
+
+#[cfg(test)]
+mod version_test;

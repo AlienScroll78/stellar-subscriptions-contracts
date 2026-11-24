@@ -1,0 +1,39 @@
+name: Testnet keepalive
+
+# Persistent entries on testnet archive after ~30 days without interaction.
+# Run the live verification weekly (it exercises and bumps the contracts) and
+# open an issue if it fails.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli
+
+      - name: Verify testnet deployment
+        id: verify
+        run: ./scripts/verify-testnet.sh
+        env:
+          NETWORK: testnet
+
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Testnet keepalive failed ($(date -u +%Y-%m-%d))" \
+            --body "The weekly testnet keepalive failed. The deployment may have archived or changed. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

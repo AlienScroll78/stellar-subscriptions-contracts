@@ -3,6 +3,7 @@ extern crate std;
 use core::fmt::Debug;
 
 use soroban_sdk::{
+    contract, contractimpl,
     testutils::{Address as _, Ledger},
     token::{StellarAssetClient, TokenClient},
     Address, Env,
@@ -34,6 +35,24 @@ pub struct Snapshot {
     pub subscriber_balance: i128,
     pub merchant_balance: i128,
     pub allowance: i128,
+}
+
+/// Minimal merchant contract used to exercise contract-account (C...)
+/// merchants. It forwards `charge` to the subscription contract so the
+/// subscription contract sees the merchant contract as the caller.
+#[contract]
+pub struct MerchantContract;
+
+#[contractimpl]
+impl MerchantContract {
+    pub fn charge(
+        env: Env,
+        subscription: Address,
+        subscription_id: u64,
+    ) -> Result<(), Error> {
+        SubscriptionContractClient::new(&env, &subscription).charge(&subscription_id);
+        Ok(())
+    }
 }
 
 impl Setup {
@@ -77,6 +96,20 @@ impl Setup {
             &amount,
             &interval,
             &cap,
+            &0,
+            &0,
+        )
+    }
+
+    /// Subscribe with an arbitrary merchant address (e.g. a contract account).
+    pub fn subscribe_with_merchant(&self, merchant: &Address) -> u64 {
+        self.client.subscribe(
+            &self.subscriber,
+            merchant,
+            &self.token.address,
+            &AMOUNT,
+            &INTERVAL,
+            &CAP,
             &0,
             &0,
         )
@@ -130,5 +163,30 @@ pub fn expect_err<T: Debug, C: Debug, I: Debug>(
         Err(Ok(actual)) => assert_eq!(actual, expected),
         Err(Err(host)) => panic!("expected {expected:?}, got host error {host:?}"),
         Ok(value) => panic!("expected {expected:?}, but the call succeeded with {value:?}"),
+    }
+}
+
+#[cfg(test)]
+mod already_configured_tests {
+    use super::*;
+
+    #[test]
+    fn set_plan_contract_returns_already_configured_after_subscription() {
+        let setup = Setup::new();
+        setup.subscribe();
+
+        let plan = Address::generate(&setup.env);
+        let result = setup.client.try_set_plan_contract(&plan);
+        expect_err(result, Error::AlreadyConfigured);
+    }
+
+    #[test]
+    fn set_registry_returns_already_configured_after_subscription() {
+        let setup = Setup::new();
+        setup.subscribe();
+
+        let registry = Address::generate(&setup.env);
+        let result = setup.client.try_set_registry(&registry);
+        expect_err(result, Error::AlreadyConfigured);
     }
 }

@@ -1,11 +1,71 @@
 # Contributing
 
+Thanks for your interest in contributing! This document covers the basics.
+Thanks for helping improve this project. This document covers code style, the
+pull request process, and the workflow for extending the contracts.
+
+## Code style
+
+- Run `cargo fmt` and `cargo clippy --all-targets -- -D warnings` before pushing.
+- Keep functions small and documented; public items need doc comments.
+- Prefer checked arithmetic (`checked_add`, `checked_sub`, ...) over raw operators.
+- Do not introduce new dependencies without discussion in an issue first.
+
+## Pull request process
+
+1. Open an issue describing the change (or pick an existing one).
+2. Branch from `main` and keep commits focused.
+3. Make sure `cargo test` passes for every affected contract.
+4. Open the PR, link the issue, and describe the behaviour change.
+
+## Adding a new entry point
+
+Adding a contract entry point touches several layers. Work through this
+checklist in order so nothing is missed.
+
+1. **Add a `DataKey` variant.** In `src/types.rs`, add a variant to the
+   `DataKey` enum for any new persistent storage the entry point needs. Keep
+   the naming consistent with existing variants.
+2. **Write storage functions.** In `src/storage.rs`, add the read/write helpers
+   for the new key(s). Use the existing `bump_instance`/`bump_persistent`
+   helpers so TTLs stay correct, and return `Result<_, Error>` where a value may
+   be absent.
+3. **Write the entry point.** In `src/lib.rs`, add the `pub fn` inside the
+   `#[contractimpl]` block. Validate inputs, require auth where needed, update
+   storage, and return `Result<_, Error>`.
+4. **Add an event.** In `src/events.rs`, define a `#[contracttype]` event struct
+   and publish it from the entry point after state changes succeed.
+5. **Add error codes.** In `src/errors.rs`, add any new `Error` variants. Keep
+   the numeric discriminants stable — never renumber existing variants.
+6. **Write unit tests.** Add tests under `src/test.rs` covering the happy path,
+   each new error branch, and auth failures. Every new `DataKey` variant must be
+   handled in the `covers_all_variants` match so the compiler flags any variant
+   that is added without a corresponding test.
+7. **Update docs.** Document the entry point in the contract's module docs and
+   in any user-facing docs (README, integration guides).
+
+### Golden XDR tests
+
+Any change to the contract's public interface (new entry point, changed
+argument or return types, new event) requires a golden XDR test. These tests
+snapshot the serialized invocation and assert it matches the committed
+fixture, catching accidental ABI breaks. Regenerate the fixture only when the
+interface change is intentional, and call it out in the PR description.
+
+### `covers_all_variants`
+
+The `covers_all_variants` match in the test module is exhaustive over
+`DataKey`. When you add a variant, the build fails until you add a matching arm
+and a test for it. This is intentional: it keeps storage coverage honest.
 Thanks for helping. This repository holds money-moving contracts, so the bar
 for changes to the subscription contract is high. Please read
 [The invariants](#the-invariants) before opening a PR.
 
-## Local setup
+## Getting started
 
+1. Fork the repository and create a branch from `main`.
+2. Make your change with tests where appropriate.
+3. Open a pull request describing the change and linking the related issue.
 1. **Rust.** Install [rustup](https://rustup.rs). The pinned toolchain,
    the `wasm32v1-none` target, `rustfmt` and `clippy` are installed
    automatically from `rust-toolchain.toml` the first time you run `cargo`.
@@ -36,7 +96,13 @@ for changes to the subscription contract is high. Please read
 | Format | `make fmt` |
 | Build wasm (CLI) | `make build` |
 | Build wasm (cargo only, as CI does) | `make wasm` |
-| Everything CI checks | `make check` |
+| Markdown links and spelling | `make lint-docs` |
+| Core CI checks | `make check` |
+
+Install Node.js with npm and run `pipx install codespell==2.4.1` before
+running `make lint-docs`. Add project vocabulary to
+`.github/docs-words.txt` one word per line.
+
 | Fuzz deeper than the default | `PROPTEST_CASES=500 cargo test -p subscription fuzz` |
 | Prove the invariants on the live deployment | `make verify` (after `DEMO=1 make deploy`) |
 | Deploy to Testnet | `make deploy` |
@@ -187,11 +253,33 @@ PROPTEST_CASES=500 cargo test -p subscription fuzz
 
 - Keep PRs focused. Invariant-affecting changes should not be mixed with
   refactors.
+- Update `CHANGELOG.md` when your PR changes files under `contracts/`.
+  For documentation-only changes under that directory, a maintainer can
+  apply the `skip-changelog` label to bypass the CI check.
 - CI must be green: tests, clippy, fmt and the wasm build.
 - Changes to `contracts/subscription` need a review that explicitly checks
   the checklist above.
+- Keep PRs focused on a single issue.
+- Include a clear description of the change and how it was verified.
+- Ensure CI passes before requesting review.
 
-## Sister repositories
+## WASM size budget
 
+Contract WASM sizes are limited by `.github/wasm-size-budget.json`. If your
+change increases a contract's size, follow the process in
+[`docs/wasm-size-budget.md`](docs/wasm-size-budget.md): update the budget in the
+same PR and include a justification comment. Budget increases above the warn
+threshold require maintainer approval.
 - Web app: https://github.com/stellar-sub/stellar-subscriptions-web
 - API + Docs: https://github.com/stellar-sub/stellar-subscriptions-api-docs
+
+## Review of error codes and status discriminants
+
+`contracts/*/src/errors.rs` (the `#[repr(u32)]` error codes) and
+`contracts/*/src/types.rs` (such as the `SubStatus` discriminants) are part of
+the public ABI. Clients, indexers and `docs/errors.json` depend on the exact
+numeric values, so renumbering or reusing a value is a breaking change.
+`.github/CODEOWNERS` therefore requests review from both
+`@stellar-sub/maintainers` and `@stellar-sub/security` for these files. CODEOWNERS
+only requests reviewers: to require two approvals, enable "Require review from
+Code Owners" and at least 2 required approvals in the branch protection rules.

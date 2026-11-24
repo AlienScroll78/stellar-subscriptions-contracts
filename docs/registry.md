@@ -138,3 +138,15 @@ index can never reach a state the subscription contract could not:
 | 13 | `PageSizeTooLarge` |
 
 Codes are append-only.
+
+
+## `set_writers` does not validate its addresses
+
+`set_writers` accepts any `Address` for the subscription and plan contracts.
+It does not check that they are deployed contracts (see
+`set_writers_accepts_arbitrary_non_contract_addresses` in
+`contracts/registry/src/test.rs`). Because `set_writers` is callable only once,
+a wrong address cannot be corrected and the registry must be redeployed.
+Recommendation: before calling it, confirm both ids are the intended deployed
+contracts (for example with `stellar contract info`), and verify
+`get_writers` afterwards.

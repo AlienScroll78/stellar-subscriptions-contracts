@@ -11,6 +11,28 @@
 //! subscriber's non-final subscriptions in that token, recomputed from
 //! contract state rather than adjusted incrementally, so a stale or expired
 //! allowance is repaired the next time the subscriber touches it.
+//!
+//! # FAQ: "My merchant says charges are failing — what do I do?"
+//!
+//! **Symptoms.** `charge` reverts with `TransferFailed` (see
+//! [`Error::TransferFailed`]) even though the subscription is active and the
+//! interval has elapsed.
+//!
+//! **Cause.** The token allowance this contract holds on the subscriber's
+//! behalf has expired. `approve` sets a `live_until_ledger`; once the ledger
+//! passes it the token treats the allowance as zero, so the nested
+//! `transfer_from` fails and `charge` surfaces `TransferFailed`. This is
+//! expected when nobody has touched the subscription for a long time — the
+//! allowance is only refreshed by subscriber-authorized entry points.
+//!
+//! **Fix.** The subscriber calls `refresh_allowance`, which re-approves this
+//! contract for exactly [`outstanding`] until the aligned maximum expiry.
+//! After that, `charge` succeeds again on the next attempt.
+//!
+//! **Nothing is lost.** A failed `charge` makes no state changes: no
+//! `total_charged` increment, no `last_charged` update, no status change. The
+//! schedule is unchanged, so once the allowance is refreshed the merchant can
+//! charge normally and no payments are skipped or double-counted.
 
 use soroban_sdk::{token::TokenClient, Address, Env};
 

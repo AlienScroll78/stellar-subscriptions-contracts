@@ -108,6 +108,9 @@ fn batch_with_exactly_max_ids_succeeds() {
         assert_eq!(s.sub(id).total_charged, AMOUNT);
     }
     assert_eq!(s.balance(&s.merchant), MAX_BATCH as i128 * AMOUNT);
+}
+
+#[test]
 fn soft_batch_charges_every_subscription() {
     let s = Setup::new();
     let a = s.subscribe();

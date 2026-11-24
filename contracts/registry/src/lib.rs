@@ -147,8 +147,6 @@ impl RegistryContract {
                 id: subscription_id,
                 subscriber,
                 merchant: merchant.clone(),
-                subscriber: subscriber.clone(),
-                merchant: merchant.clone(),
                 token,
                 total_charged: 0,
                 status: STATUS_ACTIVE,

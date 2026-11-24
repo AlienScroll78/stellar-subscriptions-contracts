@@ -179,6 +179,40 @@ Emitted when a subscriber pauses charging.
 
 ---
 
+### `merchant_ended`
+
+Emitted when a merchant ends a subscription. Ending is final; no further
+charges, pauses, resumes, or subscriber cancellations can change the
+subscription.
+
+| Position | Kind | Type | Value |
+|---|---|---|---|
+| topic 0 | event name | `Symbol` | `"merchant_ended"` |
+| topic 1 | subscription_id | `u64` | the ended subscription's id |
+| topic 2 | merchant | `Address` | merchant who ended the subscription |
+| data 0 | total_charged | `i128` | cumulative amount charged before the subscription ended |
+
+**When emitted:** at the end of a successful `merchant_end()` call, after state
+is written and the registry follow-up is attempted.
+
+**Decoded example:**
+
+```json
+{
+  "type": "contract",
+  "ledger": 4694201,
+  "contractId": "CAW5H4BH5VXWR23DFUVMY45TL7JSMTDZTH3E7LMMXW5LZ7FMDL33KXMM",
+  "topics": [
+    "merchant_ended",
+    4,
+    "GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+  ],
+  "data": [30000000]
+}
+```
+
+---
+
 ### `resumed`
 
 Emitted when a subscriber resumes charging after a pause.
@@ -205,6 +239,71 @@ Emitted when a subscriber resumes charging after a pause.
     "GBKAVFZ5GCZMMIV3ZKZL5USKFYT5DBBZTY4P5V5J75ANHWTX7GASETK4"
   ],
   "data": [4693001]
+}
+```
+
+---
+
+### `plan_associated`
+
+Emitted when a subscriber retroactively links an ad-hoc subscription to a
+plan.
+
+| Position | Kind | Type | Value |
+|---|---|---|---|
+| topic 0 | event name | `Symbol` | `"plan_associated"` |
+| topic 1 | subscription_id | `u64` | the associated subscription's id |
+| topic 2 | subscriber | `Address` | subscriber who associated the subscription |
+| data 0 | plan_id | `u64` | id of the plan being associated |
+
+**When emitted:** at the end of a successful `associate_plan()` call.
+
+**Decoded example:**
+
+```json
+{
+  "type": "contract",
+  "ledger": 4694202,
+  "contractId": "CAW5H4BH5VXWR23DFUVMY45TL7JSMTDZTH3E7LMMXW5LZ7FMDL33KXMM",
+  "topics": [
+    "plan_associated",
+    4,
+    "GBKAVFZ5GCZMMIV3ZKZL5USKFYT5DBBZTY4P5V5J75ANHWTX7GASETK4"
+  ],
+  "data": [1]
+}
+```
+
+---
+
+### `plan_description_updated`
+
+Emitted when a plan description is set or updated on the subscription contract's
+mirrored-plan event surface.
+
+| Position | Kind | Type | Value |
+|---|---|---|---|
+| topic 0 | event name | `Symbol` | `"plan_description_updated"` |
+| topic 1 | plan_id | `u64` | id of the updated plan |
+| topic 2 | merchant | `Address` | merchant who owns the plan |
+| data 0 | description | `Option<String>` | new description, or `null` if cleared |
+
+**When emitted:** when this mirrored plan-description event is published by the
+subscription contract.
+
+**Decoded example:**
+
+```json
+{
+  "type": "contract",
+  "ledger": 4694203,
+  "contractId": "CAW5H4BH5VXWR23DFUVMY45TL7JSMTDZTH3E7LMMXW5LZ7FMDL33KXMM",
+  "topics": [
+    "plan_description_updated",
+    1,
+    "GCLAL5UFF47MT7JMJHSS4BWXMMKJSTGYE62HJ5X77N45UKLF7BIDKKTU"
+  ],
+  "data": ["Updated hourly demo plan"]
 }
 ```
 
@@ -265,11 +364,6 @@ Emitted when a merchant publishes a new billing plan.
 | data 3 | interval_ledgers | `u32` | e.g. `720` |
 | data 4 | default_cap | `i128` | suggested cap (>= amount_per_period) |
 | data 5 | created_at | `u32` | ledger sequence at which the plan was created |
-| data 1 | description | `Option<String>` | optional description (0–256 bytes), `null` if not set |
-| data 2 | token | `Address` | token contract address |
-| data 3 | amount_per_period | `i128` | e.g. `10000000` |
-| data 4 | interval_ledgers | `u32` | e.g. `720` |
-| data 5 | default_cap | `i128` | suggested cap (>= amount_per_period) |
 
 **When emitted:** at the end of a successful `create_plan()` call, after the
 plan is registered with the registry.
@@ -428,7 +522,7 @@ Emitted by `update_subscription` after the indexed total and status change.
 | topic 0 | event name | `Symbol` | `"subscription_updated"` |
 | topic 1 | subscription_id | `u64` | e.g. `1` |
 | data 0 | total_charged | `i128` | new total, raw token units |
-| data 1 | status | `u32` | new status: 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted |
+| data 1 | status | `u32` | new status: 0 Active, 1 Paused, 2 Cancelled, 3 Exhausted, 4 MerchantEnded |
 
 The registry's own state can still be reconstructed from the subscription
 contract's events; these events are a convenience for indexers that only watch

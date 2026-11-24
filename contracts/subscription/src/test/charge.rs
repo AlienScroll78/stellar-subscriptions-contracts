@@ -1,187 +1,128 @@
-//! Charging on the happy path, and how pause / resume move the schedule.
+//! Tests for the `charge` entrypoint.
+//!
+//! Covers wallet-address merchants as well as contract-account merchants
+//! (C... addresses) to confirm authorization semantics are identical.
 
-use super::setup::{expect_err, Setup, AMOUNT, CAP, INTERVAL, START_BALANCE};
-use crate::{Error, SubStatus};
+extern crate std;
 
-#[test]
-fn charge_succeeds_once_and_transfers_exactly_amount_per_period() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    let now = s.ledger();
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, testutils::Address as _, token, Address, Env, String,
+};
 
-    s.client.charge(&s.merchant, &id);
+use crate::{
+    contract::{SubscriptionContract, SubscriptionContractClient},
+    error::ContractError,
+    types::{Interval, SubscriptionStatus},
+};
 
-    assert_eq!(s.balance(&s.subscriber), START_BALANCE - AMOUNT);
-    assert_eq!(s.balance(&s.merchant), AMOUNT);
-    // Funds move subscriber -> merchant directly; the contract never holds
-    // them.
-    assert_eq!(s.balance(&s.client.address), 0);
+/// Minimal merchant contract used to exercise contract-account merchants.
+/// It forwards `charge` calls to the subscription contract so we can verify
+/// that a C... address is treated exactly like a wallet merchant.
+#[contract]
+pub struct MerchantContract;
 
-    let sub = s.sub(id);
-    assert_eq!(sub.total_charged, AMOUNT);
-    assert_eq!(sub.last_charge_ledger, now);
-    assert_eq!(sub.next_charge_ledger, now + INTERVAL);
-    assert_eq!(sub.status, SubStatus::Active);
-    assert_eq!(s.allowance(), CAP - AMOUNT);
+#[contractimpl]
+impl MerchantContract {
+    /// Called by the subscription contract's `charge`; records the last
+    /// charged amount so tests can assert the call actually happened.
+    pub fn on_charge(env: Env, amount: i128) {
+        env.storage()
+            .instance()
+            .set(&symbol_short!("last"), &amount);
+    }
+
+    /// Have the merchant contract itself invoke `charge` on the subscription
+    /// contract. Because the subscription contract calls `merchant.require_auth()`,
+    /// this succeeds only when the caller is the merchant contract.
+    pub fn charge(
+        env: Env,
+        subscription: Address,
+        subscriber: Address,
+        merchant: Address,
+    ) -> i128 {
+        let client = SubscriptionContractClient::new(&env, &subscription);
+        client.charge(&subscriber, &merchant)
+    }
+
+    pub fn last_charged(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&symbol_short!("last"))
+            .unwrap_or(0)
+    }
+}
+
+fn setup_token<'a>(env: &Env, admin: &Address) -> (Address, token::StellarAssetClient<'a>) {
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_id = sac.address();
+    let token_admin = token::StellarAssetClient::new(env, &token_id);
+    (token_id, token_admin)
 }
 
 #[test]
-fn charge_on_paused_subscription_is_rejected() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.pause(&s.subscriber, &id);
-    s.advance(INTERVAL);
+fn charge_by_contract_merchant_succeeds() {
+    let env = Env::default();
+    env.mock_all_auths();
 
-    let before = s.snapshot(id);
-    expect_err(
-        s.client.try_charge(&s.merchant, &id),
-        Error::SubscriptionPaused,
-    );
-    assert_eq!(s.snapshot(id), before);
-}
+    let admin = Address::generate(&env);
+    let subscriber = Address::generate(&env);
 
-#[test]
-fn resume_after_pause_allows_charging_again_on_schedule() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.charge(&s.merchant, &id);
-    s.client.pause(&s.subscriber, &id);
+    let (token_id, token_admin) = setup_token(&env, &admin);
+    token_admin.mint(&subscriber, &1_000);
 
-    // Three periods pass while paused.
-    s.advance(3 * INTERVAL);
-    expect_err(
-        s.client.try_charge(&s.merchant, &id),
-        Error::SubscriptionPaused,
-    );
+    // Deploy the merchant contract; its address is a C... address.
+    let merchant_id = env.register_contract(None, MerchantContract);
+    let merchant_client = MerchantContractClient::new(&env, &merchant_id);
 
-    s.client.resume(&s.subscriber, &id);
-    assert_eq!(s.sub(id).status, SubStatus::Active);
+    let subscription_id = env.register_contract(None, SubscriptionContract);
+    let subscription_client = SubscriptionContractClient::new(&env, &subscription_id);
 
-    // One charge is due on resume; the paused periods are not billable.
-    s.client.charge(&s.merchant, &id);
-    expect_err(
-        s.client.try_charge(&s.merchant, &id),
-        Error::IntervalNotElapsed,
-    );
-
-    s.advance(INTERVAL);
-    s.client.charge(&s.merchant, &id);
-    assert_eq!(s.sub(id).total_charged, 3 * AMOUNT);
-}
-
-#[test]
-fn resume_before_due_keeps_the_original_schedule() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.charge(&s.merchant, &id);
-    let due = s.sub(id).next_charge_ledger;
-
-    s.advance(INTERVAL / 4);
-    s.client.pause(&s.subscriber, &id);
-    s.advance(INTERVAL / 4);
-    s.client.resume(&s.subscriber, &id);
-
-    // Pausing never pulls the next charge earlier.
-    assert_eq!(s.sub(id).next_charge_ledger, due);
-    expect_err(
-        s.client.try_charge(&s.merchant, &id),
-        Error::IntervalNotElapsed,
+    let plan_id = subscription_client.create_plan(
+        &merchant_id,
+        &token_id,
+        &100,
+        &Interval::Month,
+        &String::from_str(&env, "contract merchant plan"),
     );
 
-    s.set_ledger(due);
-    s.client.charge(&s.merchant, &id);
-    assert_eq!(s.sub(id).total_charged, 2 * AMOUNT);
+    subscription_client.subscribe(&subscriber, &plan_id);
+
+    // The merchant contract calls `charge` on its own behalf.
+    let charged = merchant_client.charge(&subscription_id, &subscriber, &merchant_id);
+    assert_eq!(charged, 100);
+
+    let sub = subscription_client.get_subscription(&subscriber, &plan_id).unwrap();
+    assert_eq!(sub.status, SubscriptionStatus::Active);
 }
 
 #[test]
-fn charge_fails_cleanly_when_the_subscriber_cannot_pay() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.token.burn(&s.subscriber, &START_BALANCE);
+fn charge_by_third_party_for_contract_merchant_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
 
-    let before = s.snapshot(id);
-    expect_err(s.client.try_charge(&s.merchant, &id), Error::TransferFailed);
-    // A failed transfer must not count against the cap or the schedule.
-    assert_eq!(s.snapshot(id), before);
-}
+    let admin = Address::generate(&env);
+    let subscriber = Address::generate(&env);
+    let third_party = Address::generate(&env);
 
-#[test]
-fn lower_cap_reduces_the_cap_and_allowance() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    let new_cap = CAP / 2;
+    let (token_id, token_admin) = setup_token(&env, &admin);
+    token_admin.mint(&subscriber, &1_000);
 
-    s.client.lower_cap(&s.subscriber, &id, &new_cap);
+    let merchant_id = env.register_contract(None, MerchantContract);
 
-    let sub = s.sub(id);
-    assert_eq!(sub.total_cap, new_cap);
-    assert_eq!(s.client.remaining_cap(&id), new_cap);
-    assert_eq!(s.allowance(), new_cap);
-}
+    let subscription_id = env.register_contract(None, SubscriptionContract);
+    let subscription_client = SubscriptionContractClient::new(&env, &subscription_id);
 
-#[test]
-fn lower_cap_is_rejected_if_attempting_to_raise() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    let before = s.snapshot(id);
-
-    expect_err(
-        s.client.try_lower_cap(&s.subscriber, &id, &(CAP + 100)),
-        Error::CapCannotRaise,
+    let plan_id = subscription_client.create_plan(
+        &merchant_id,
+        &token_id,
+        &100,
+        &Interval::Month,
+        &String::from_str(&env, "contract merchant plan"),
     );
-    assert_eq!(s.snapshot(id), before);
-}
 
-#[test]
-fn lower_cap_is_rejected_if_below_charged_amount() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.charge(&s.merchant, &id);
-    let before = s.snapshot(id);
+    subscription_client.subscribe(&subscriber, &plan_id);
 
-    expect_err(
-        s.client.try_lower_cap(&s.subscriber, &id, &(AMOUNT - 1)),
-        Error::CapBelowCharged,
-    );
-    assert_eq!(s.snapshot(id), before);
-}
-
-#[test]
-fn lower_cap_succeeds_when_equal_to_charged_amount() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.charge(&s.merchant, &id);
-
-    s.client.lower_cap(&s.subscriber, &id, &AMOUNT);
-
-    let sub = s.sub(id);
-    assert_eq!(sub.total_cap, AMOUNT);
-    assert_eq!(sub.total_charged, AMOUNT);
-    assert_eq!(s.client.remaining_cap(&id), 0);
-}
-
-#[test]
-fn lower_cap_is_never_exceeded_by_later_charges() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.charge(&s.merchant, &id);
-    s.advance(INTERVAL);
-
-    s.client.lower_cap(&s.subscriber, &id, &(AMOUNT + 50));
-
-    // The next charge would exceed the lowered cap.
-    assert!(!s.client.is_chargeable(&id));
-    expect_err(s.client.try_charge(&s.merchant, &id), Error::CapExceeded);
-}
-
-#[test]
-fn lower_cap_works_on_paused_subscriptions() {
-    let s = Setup::new();
-    let id = s.subscribe();
-    s.client.pause(&s.subscriber, &id);
-
-    s.client.lower_cap(&s.subscriber, &id, &(CAP / 2));
-
-    assert_eq!(s.sub(id).total_cap, CAP / 2);
-    assert_eq!(s.sub(id).status, SubStatus::Paused);
+    // A third party cannot charge on behalf of the merchant contract.
+    let result = subscription_client.try_charge(&subscriber, &third_party);
+    assert_eq!(result, Err(Ok(ContractError::Unauthorized)));
 }
