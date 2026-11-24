@@ -195,3 +195,14 @@ PROPTEST_CASES=500 cargo test -p subscription fuzz
 
 - Web app: https://github.com/stellar-sub/stellar-subscriptions-web
 - API + Docs: https://github.com/stellar-sub/stellar-subscriptions-api-docs
+
+## Review of error codes and status discriminants
+
+`contracts/*/src/errors.rs` (the `#[repr(u32)]` error codes) and
+`contracts/*/src/types.rs` (such as the `SubStatus` discriminants) are part of
+the public ABI. Clients, indexers and `docs/errors.json` depend on the exact
+numeric values, so renumbering or reusing a value is a breaking change.
+`.github/CODEOWNERS` therefore requests review from both
+`@stellar-sub/maintainers` and `@stellar-sub/security` for these files. CODEOWNERS
+only requests reviewers: to require two approvals, enable "Require review from
+Code Owners" and at least 2 required approvals in the branch protection rules.
