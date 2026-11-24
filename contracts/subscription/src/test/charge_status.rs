@@ -67,9 +67,18 @@ fn cap_would_be_exceeded_is_reported_before_a_charge_is_tried() {
 #[test]
 fn expired_is_reported_once_expires_at_passes() {
     let s = Setup::new();
-    let id = s.subscribe();
-    s.advance(INTERVAL);
-    s.client.expire(&id);
+    let expires_at = s.ledger() + INTERVAL;
+    let id = s.client.subscribe_until(
+        &s.subscriber,
+        &s.merchant,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &(10 * AMOUNT),
+        &0,
+        &expires_at,
+    );
+    s.advance(INTERVAL + 1);
     assert_agrees(&s, id, ChargeStatus::Expired);
 }
 
@@ -77,8 +86,11 @@ fn expired_is_reported_once_expires_at_passes() {
 fn merchant_ended_is_reported_once_the_merchant_ends() {
     let s = Setup::new();
     let id = s.subscribe();
-    s.client.end_merchant(&s.merchant);
+    s.client.merchant_end(&s.merchant, &id);
     assert_agrees(&s, id, ChargeStatus::MerchantEnded);
+}
+
+#[test]
 fn merchant_ended_is_reported_before_the_merchant_identity_check() {
     let s = Setup::new();
     let id = s.subscribe();

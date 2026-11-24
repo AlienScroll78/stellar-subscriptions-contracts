@@ -1,7 +1,7 @@
 //! Minimal interfaces to the plan and registry contracts, declared here so
 //! this crate depends on neither at build time.
 
-use soroban_sdk::{contractclient, contracttype, Address, Env, Option, String};
+use soroban_sdk::{contractclient, contracttype, Address, Env, String};
 
 /// Mirror of the plan contract's `Plan`. Contract types are decoded by field
 /// name across contracts, so these names must match that contract exactly.
@@ -19,6 +19,7 @@ pub struct Plan {
     pub active: bool,
     pub created_at: u32,
     pub description: Option<String>,
+    pub subscriber_count: u64,
 }
 
 // The traits exist only so `contractclient` can generate the clients; the
@@ -27,6 +28,7 @@ pub struct Plan {
 #[contractclient(name = "PlanClient")]
 pub trait PlanInterface {
     fn get_plan(env: Env, plan_id: u64) -> Plan;
+    fn increment_subscriber_count(env: Env, plan_id: u64);
 }
 
 #[allow(dead_code)]

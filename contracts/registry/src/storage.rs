@@ -2,7 +2,7 @@ use soroban_sdk::{contracttype, Address, Env, Vec};
 
 use crate::{
     errors::Error,
-    types::{RegistryStats, SubscriptionRecord, Writers},
+    types::{MerchantStats, RegistryStats, SubscriptionRecord, Writers},
 };
 
 use common::DAY_IN_LEDGERS;
@@ -97,6 +97,23 @@ pub fn read_stats(env: &Env) -> RegistryStats {
 
 pub fn write_stats(env: &Env, stats: &RegistryStats) {
     let key = DataKey::Stats;
+    env.storage().persistent().set(&key, stats);
+    bump_persistent(env, &key);
+}
+
+pub fn read_merchant_stats(env: &Env, merchant: &Address) -> MerchantStats {
+    let key = DataKey::MerchantStats(merchant.clone());
+    match env.storage().persistent().get(&key) {
+        Some(stats) => {
+            bump_persistent(env, &key);
+            stats
+        }
+        None => MerchantStats::default(),
+    }
+}
+
+pub fn write_merchant_stats(env: &Env, merchant: &Address, stats: &MerchantStats) {
+    let key = DataKey::MerchantStats(merchant.clone());
     env.storage().persistent().set(&key, stats);
     bump_persistent(env, &key);
 }

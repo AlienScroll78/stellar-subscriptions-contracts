@@ -1,37 +1,35 @@
 mod setup;
 
-mod invariant_cap;
-mod invariant_interval;
-mod invariant_revocation;
-
-mod fuzz;
-
 mod allowance;
+mod allowance_sync_many_subscriptions;
 mod associate_plan;
 mod auth;
 mod batch_charge;
 mod charge;
 mod charge_status;
-mod contract_merchant;
-mod allowance_sync_many_subscriptions;
+mod due_views;
 mod events;
 mod expiry;
+mod fuzz;
 mod hostile_token;
-mod ttl_by_subscriber_keepalive;
 mod integration;
 mod interval_limits;
+mod invariant_cap;
+mod invariant_interval;
+mod invariant_revocation;
 mod merchant_end_registry;
-mod new_features;
-mod simulation_drift;
-mod status_sync;
-mod reentrant_plan;
+mod merchant_isolation;
+mod merchant_pages;
+mod mock_registry;
 mod new_features;
 mod plan_index;
-mod registry_status;
+mod plan_mirror;
+mod reentrant_plan;
+mod reentrant_token;
 mod simulation_drift;
+mod status_sync;
 mod trial;
+mod ttl;
+mod ttl_by_subscriber_keepalive;
 mod validation;
 mod views;
-
-mod already_configured;
-mod plan_mirror;

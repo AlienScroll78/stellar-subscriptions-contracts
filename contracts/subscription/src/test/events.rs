@@ -70,7 +70,6 @@ fn subscribe_with_trial_emits_trial_and_expiry() {
             total_cap: CAP,
             plan_id: 0,
             trial_ledgers: trial,
-            expires_at: now + trial,
             expires_at: 0,
         },
     );
@@ -120,12 +119,13 @@ fn the_charge_that_reaches_the_cap_reports_exhaustion() {
 fn charged_event_token_matches_the_subscriptions_token() {
     let s = Setup::new();
     let id = s.subscribe();
-    let now = s.ledger();
     s.client.charge(&s.merchant, &id);
 
     let sub = s.sub(id);
     assert_eq!(sub.token, s.token.address);
+}
 
+#[test]
 fn exhausted_is_false_until_the_final_charge() {
     let s = Setup::new();
     // Cap = 3 periods, so the third charge exactly exhausts it.
@@ -156,13 +156,6 @@ fn exhausted_is_false_until_the_final_charge() {
         Charged {
             subscription_id: id,
             merchant: s.merchant.clone(),
-            token: sub.token.clone(),
-            amount: AMOUNT,
-            total_charged: AMOUNT,
-            next_charge_ledger: now + INTERVAL,
-            exhausted: false,
-        },
-    );
             token: s.token.address.clone(),
             amount: AMOUNT,
             total_charged: 3 * AMOUNT,
@@ -281,6 +274,23 @@ fn pause_emits_paused() {
             subscription_id: id,
             subscriber: s.subscriber.clone(),
             ledger: now,
+        },
+    );
+}
+
+#[test]
+fn paused_event_ledger_matches_the_ledger_advanced_before_pausing() {
+    let s = Setup::new();
+    let id = s.subscribe();
+    s.advance(5);
+    let captured = s.ledger();
+    s.client.pause(&s.subscriber, &id);
+    assert_only_event(
+        &s,
+        Paused {
+            subscription_id: id,
+            subscriber: s.subscriber.clone(),
+            ledger: captured,
         },
     );
 }

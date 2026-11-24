@@ -50,7 +50,8 @@ impl MerchantContract {
         subscription: Address,
         subscription_id: u64,
     ) -> Result<(), Error> {
-        SubscriptionContractClient::new(&env, &subscription).charge(&subscription_id);
+        SubscriptionContractClient::new(&env, &subscription)
+            .charge(&env.current_contract_address(), &subscription_id);
         Ok(())
     }
 }
@@ -176,7 +177,7 @@ mod already_configured_tests {
         setup.subscribe();
 
         let plan = Address::generate(&setup.env);
-        let result = setup.client.try_set_plan_contract(&plan);
+        let result = setup.client.try_set_plan_contract(&setup.admin, &plan);
         expect_err(result, Error::AlreadyConfigured);
     }
 
@@ -186,7 +187,7 @@ mod already_configured_tests {
         setup.subscribe();
 
         let registry = Address::generate(&setup.env);
-        let result = setup.client.try_set_registry(&registry);
+        let result = setup.client.try_set_registry(&setup.admin, &registry);
         expect_err(result, Error::AlreadyConfigured);
     }
 }

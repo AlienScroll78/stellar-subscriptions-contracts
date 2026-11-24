@@ -90,6 +90,23 @@ and changes nothing (tested).
   cap. A party with a very large number of subscriptions can hit the
   per-transaction resource limit there. Use an indexer on the emitted
   events for those, or `get_subscription_summary` for a single id.
+
+  `tests/instruction_cost.rs` benchmarks the per-subscription CPU cost of
+  walking a subscriber's full history with `env.cost_estimate().budget()`,
+  at 10, 100 and 1,000 subscriptions (via `get_by_subscriber_page`, which has
+  no ceiling, since `get_by_subscriber` itself refuses more than
+  `MAX_LIST_SIZE` and so cannot be measured directly at 1,000). Run
+  `cargo test -p subscription --test instruction_cost -- --nocapture` to
+  print the exact instruction counts and the derived per-subscription cost
+  for this build/toolchain; they are not reproduced here because they drift
+  with the Soroban host version and should be read fresh. The existing
+  `MAX_LIST_SIZE` of 200 is this repository's current answer to "how many is
+  too many" for the unpaged getters; operators relying on the uncapped
+  allowance walk in `subscribe`/`cancel`/`refresh_allowance` should use the
+  benchmark's per-subscription figure times their expected worst-case
+  subscriber history size to check they are comfortably under the
+  per-transaction instruction limit, and keep subscriber histories within
+  the low hundreds if in doubt.
 - **Allowances expire.** The contract approves until the network's maximum
   entry lifetime (aligned to a ~1-day window so signatures stay valid between
   simulation and submission). Past that, charges fail with `TransferFailed`
