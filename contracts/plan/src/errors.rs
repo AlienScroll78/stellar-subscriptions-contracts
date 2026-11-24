@@ -41,10 +41,6 @@ pub enum Error {
     InvalidPageSize = 14,
     /// `reactivate_plan` was called on a plan that is already active.
     PlanAlreadyActive = 15,
-}
-    /// `description` must be at most 256 bytes.
-    InvalidDescription = 15,
-}
     /// Description must be at most `MAX_DESCRIPTION_LEN` bytes.
-    InvalidDescription = 15,
+    InvalidDescription = 16,
 }
