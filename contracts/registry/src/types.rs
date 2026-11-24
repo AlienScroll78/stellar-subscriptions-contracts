@@ -17,6 +17,40 @@ pub fn is_final(status: u32) -> bool {
     status == STATUS_CANCELLED || status == STATUS_EXHAUSTED || status == STATUS_MERCHANT_ENDED
 }
 
+/// Human-readable name for a raw `SubscriptionRecord.status` code.
+///
+/// Codes outside 0..=4 return `"Unknown"`.
+pub fn status_name(status: u32) -> &'static str {
+    match status {
+        STATUS_ACTIVE => "Active",
+        STATUS_PAUSED => "Paused",
+        STATUS_CANCELLED => "Cancelled",
+        STATUS_EXHAUSTED => "Exhausted",
+        STATUS_MERCHANT_ENDED => "MerchantEnded",
+        _ => "Unknown",
+    }
+}
+
+#[cfg(test)]
+mod status_name_tests {
+    use super::*;
+
+    #[test]
+    fn names_every_known_status() {
+        assert_eq!(status_name(STATUS_ACTIVE), "Active");
+        assert_eq!(status_name(STATUS_PAUSED), "Paused");
+        assert_eq!(status_name(STATUS_CANCELLED), "Cancelled");
+        assert_eq!(status_name(STATUS_EXHAUSTED), "Exhausted");
+        assert_eq!(status_name(STATUS_MERCHANT_ENDED), "MerchantEnded");
+    }
+
+    #[test]
+    fn unknown_status_codes_are_unknown() {
+        assert_eq!(status_name(5), "Unknown");
+        assert_eq!(status_name(u32::MAX), "Unknown");
+    }
+}
+
 /// Aggregate counters across every indexed plan and subscription.
 // `contracttype` generates an undocumentable associated function from each
 // of this file's structs; their own fields are still documented below.

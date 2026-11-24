@@ -17,6 +17,7 @@ mod expiry;
 mod hostile_token;
 mod integration;
 mod interval_limits;
+mod merchant_end_registry;
 mod new_features;
 mod simulation_drift;
 mod status_sync;
