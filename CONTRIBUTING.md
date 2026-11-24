@@ -36,7 +36,13 @@ for changes to the subscription contract is high. Please read
 | Format | `make fmt` |
 | Build wasm (CLI) | `make build` |
 | Build wasm (cargo only, as CI does) | `make wasm` |
-| Everything CI checks | `make check` |
+| Markdown links and spelling | `make lint-docs` |
+| Core CI checks | `make check` |
+
+Install Node.js with npm and run `pipx install codespell==2.4.1` before
+running `make lint-docs`. Add project vocabulary to
+`.github/docs-words.txt` one word per line.
+
 | Fuzz deeper than the default | `PROPTEST_CASES=500 cargo test -p subscription fuzz` |
 | Prove the invariants on the live deployment | `make verify` (after `DEMO=1 make deploy`) |
 | Deploy to Testnet | `make deploy` |
