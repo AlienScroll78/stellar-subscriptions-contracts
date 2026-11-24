@@ -92,6 +92,11 @@ pub fn read_admin(env: &Env) -> Result<Address, Error> {
         .ok_or(Error::NotInitialized)
 }
 
+/// Peek at the next subscription id without reserving it.
+pub fn read_next_id(env: &Env) -> u64 {
+    env.storage().instance().get(&DataKey::NextId).unwrap_or(1)
+}
+
 /// Reserve the next subscription id.
 pub fn take_next_id(env: &Env) -> Result<u64, Error> {
     let id: u64 = env.storage().instance().get(&DataKey::NextId).unwrap_or(1);

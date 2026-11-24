@@ -13,15 +13,12 @@ mod storage;
 mod types;
 
 pub use errors::Error;
-pub use types::{SubStatus, Subscription, SubscriptionSummary};
-pub use types::{ChargeStatus, SubStatus, Subscription};
+pub use types::{ChargeStatus, SubStatus, Subscription, SubscriptionSummary};
 
-use events::{Cancelled, Charged, Paused, PlanAssociated, Resumed, Subscribed};
-use events::{Cancelled, Charged, MerchantEnded, Paused, Resumed, Subscribed};
+use events::{Cancelled, Charged, MerchantEnded, Paused, PlanAssociated, Resumed, Subscribed};
 use interfaces::{PlanClient, RegistryClient};
 use soroban_sdk::{contract, contractimpl, token::TokenClient, Address, Env, Vec};
 use storage::DataKey;
-use types::SubscriptionSummary;
 
 /// Most subscriptions one `batch_charge` call may charge, so a batch stays
 /// within the per-transaction write budget.
@@ -92,6 +89,8 @@ impl SubscriptionContract {
     /// Get the admin address.
     pub fn get_admin(env: Env) -> Result<Address, Error> {
         storage::read_admin(&env)
+    }
+
     /// Backward-compatible entry point for callers that do not need trials.
     ///
     /// Delegates to [`subscribe`](Self::subscribe) with `trial_ledgers = 0`,
@@ -152,6 +151,7 @@ impl SubscriptionContract {
             interval_ledgers,
             total_cap,
             plan_id,
+            trial_ledgers,
             0,
         )
     }
@@ -186,6 +186,7 @@ impl SubscriptionContract {
             interval_ledgers,
             total_cap,
             plan_id,
+            0,
             expires_at,
         )
     }
@@ -200,6 +201,7 @@ impl SubscriptionContract {
         interval_ledgers: u32,
         total_cap: i128,
         plan_id: u64,
+        trial_ledgers: u32,
         expires_at: u32,
     ) -> Result<u64, Error> {
         storage::read_admin(env)?;
@@ -230,13 +232,9 @@ impl SubscriptionContract {
 
         let id = storage::take_next_id(env)?;
         let now = env.ledger().sequence();
-        let next_charge_ledger = now
-            .checked_add(trial_ledgers)
-            .ok_or(Error::Overflow)?;
-        let trial_ledgers = 0u32;
-        let expires_at = now.checked_add(trial_ledgers).ok_or(Error::Overflow)?;
-
-        let id = storage::take_next_id(&env)?;
+        // A trial delays the first charge; without one, the first charge is
+        // available immediately.
+        let next_charge_ledger = now.checked_add(trial_ledgers).ok_or(Error::Overflow)?;
         let sub = Subscription {
             id,
             subscriber,
@@ -248,24 +246,10 @@ impl SubscriptionContract {
             total_charged: 0,
             start_ledger: now,
             last_charge_ledger: 0,
-            next_charge_ledger: now + trial_ledgers,
-            // A trial delays the first charge; without one, the first charge
-            // is available immediately.
-            next_charge_ledger: now.saturating_add(trial_ledgers),
-            next_charge_ledger: now.saturating_add(trial_ledgers),
             next_charge_ledger,
             status: SubStatus::Active,
             plan_id,
             trial_ledgers,
-        };
-        storage::write_sub(&env, &sub);
-        storage::push_index(&env, DataKey::BySubscriber(sub.subscriber.clone()), id);
-        storage::push_index(&env, DataKey::ByMerchant(sub.merchant.clone()), id);
-        if plan_id != 0 {
-            storage::push_index(&env, DataKey::ByPlan(plan_id), id);
-            next_charge_ledger: expires_at,
-            status: SubStatus::Active,
-            plan_id,
             expires_at,
         };
         storage::write_sub(env, &sub);
@@ -295,15 +279,14 @@ impl SubscriptionContract {
         // subscription is ever left behind.
         if plan_id != 0 {
             let plan_contract =
-                storage::read_plan_contract(&env).ok_or(Error::PlanContractNotSet)?;
+                storage::read_plan_contract(env).ok_or(Error::PlanContractNotSet)?;
             let incremented =
-                PlanClient::new(&env, &plan_contract).try_increment_subscriber_count(&plan_id);
+                PlanClient::new(env, &plan_contract).try_increment_subscriber_count(&plan_id);
             if !matches!(incremented, Ok(Ok(()))) {
                 return Err(Error::PlanNotFound);
             }
         }
 
-        storage::bump_instance(&env);
         storage::bump_instance(env);
         Subscribed {
             subscription_id: id,
@@ -411,7 +394,6 @@ impl SubscriptionContract {
         Charged {
             subscription_id,
             merchant: sub.merchant,
-            token: sub.token.clone(),
             token: sub.token,
             amount: sub.amount_per_period,
             total_charged: sub.total_charged,
@@ -484,7 +466,6 @@ impl SubscriptionContract {
             SubStatus::Active | SubStatus::Paused | SubStatus::MerchantEnded => {}
             SubStatus::Cancelled => return Err(Error::SubscriptionCancelled),
             SubStatus::Exhausted => return Err(Error::SubscriptionExhausted),
-            SubStatus::MerchantEnded => return Err(Error::SubscriptionMerchantEnded),
         }
 
         sub.status = SubStatus::Cancelled;
@@ -495,7 +476,7 @@ impl SubscriptionContract {
         // already enforces REVOCATION, so a stale index entry can never allow
         // a charge.
         if sub.plan_id != 0 {
-            storage::remove_index_value(&env, DataKey::ByPlan(sub.plan_id), sub.id);
+            storage::remove_index_value(&env, &DataKey::ByPlan(sub.plan_id), sub.id);
         }
 
         // Cancellation must succeed even if the token or the registry refuses
@@ -636,6 +617,11 @@ impl SubscriptionContract {
             subscription_id,
             subscriber,
             plan_id,
+        }
+        .publish(&env);
+        Ok(())
+    }
+
     /// Merchant ends a subscription. Final: no further charges, pauses,
     /// resumes or subscriber cancellations, ever.
     ///
@@ -737,60 +723,19 @@ impl SubscriptionContract {
     /// returned exactly when `is_chargeable` is true.
     pub fn charge_status(env: Env, subscription_id: u64) -> Result<ChargeStatus, Error> {
         let sub = storage::read_sub(&env, subscription_id)?;
-        let now = env.ledger().sequence();
         match sub.status {
+            SubStatus::Paused => return Ok(ChargeStatus::Paused),
             SubStatus::Cancelled => return Ok(ChargeStatus::Cancelled),
             SubStatus::Exhausted => return Ok(ChargeStatus::Exhausted),
             SubStatus::MerchantEnded => return Ok(ChargeStatus::MerchantEnded),
-            SubStatus::Paused => return Ok(ChargeStatus::Paused),
             SubStatus::Active => {}
         }
+        let now = env.ledger().sequence();
         // `expires_at == 0` means no expiry; still chargeable at exactly
         // `expires_at`.
         if sub.expires_at != 0 && now > sub.expires_at {
             return Ok(ChargeStatus::Expired);
         }
-        if now < sub.next_charge_ledger {
-            return Ok(ChargeStatus::IntervalNotElapsed);
-        }
-        match sub.total_charged.checked_add(sub.amount_per_period) {
-            Some(total) if total <= sub.total_cap => Ok(ChargeStatus::Chargeable),
-            _ => Ok(ChargeStatus::CapExceeded),
-    /// Names the reason `charge` would succeed or fail right now, covering
-    /// every `SubStatus` plus the interval and cap checks `is_chargeable`
-    /// applies while Active.
-    pub fn charge_status(env: Env, subscription_id: u64) -> Result<ChargeStatus, Error> {
-        let sub = storage::read_sub(&env, subscription_id)?;
-        let status = match sub.status {
-            SubStatus::Paused => ChargeStatus::Paused,
-            SubStatus::Cancelled => ChargeStatus::Cancelled,
-            SubStatus::Exhausted => ChargeStatus::Exhausted,
-            SubStatus::MerchantEnded => ChargeStatus::MerchantEnded,
-            SubStatus::Active => {
-                let now = env.ledger().sequence();
-                if now < sub.next_charge_ledger {
-                    ChargeStatus::TooEarly
-                } else {
-                    match sub.total_charged.checked_add(sub.amount_per_period) {
-                        Some(total) if total <= sub.total_cap => ChargeStatus::Chargeable,
-                        _ => ChargeStatus::CapWouldBeExceeded,
-                    }
-                }
-            }
-        };
-        Ok(status)
-    /// Why `charge` would succeed or fail right now. Agrees with
-    /// `is_chargeable`: `Chargeable` exactly when that returns true.
-    pub fn charge_status(env: Env, subscription_id: u64) -> Result<ChargeStatus, Error> {
-        let sub = storage::read_sub(&env, subscription_id)?;
-        match sub.status {
-            SubStatus::Paused => return Ok(ChargeStatus::Paused),
-            SubStatus::Cancelled => return Ok(ChargeStatus::Cancelled),
-            SubStatus::Exhausted => return Ok(ChargeStatus::Exhausted),
-            SubStatus::MerchantEnded => return Ok(ChargeStatus::MerchantEnded),
-            SubStatus::Active => {}
-        }
-        let now = env.ledger().sequence();
         if now < sub.next_charge_ledger {
             return Ok(ChargeStatus::TooEarly);
         }
@@ -836,13 +781,15 @@ impl SubscriptionContract {
     }
 
     /// Number of subscriptions a subscriber has created. O(1).
-    pub fn get_subscription_count_by_subscriber(env: Env, subscriber: Address) -> u32 {
+    pub fn count_by_subscriber(env: Env, subscriber: Address) -> u32 {
         storage::read_index(&env, &DataKey::BySubscriber(subscriber)).len()
     }
 
     /// Number of subscriptions payable to a merchant. O(1).
-    pub fn get_subscription_count_by_merchant(env: Env, merchant: Address) -> u32 {
+    pub fn count_by_merchant(env: Env, merchant: Address) -> u32 {
         storage::read_index(&env, &DataKey::ByMerchant(merchant)).len()
+    }
+
     /// Lightweight analytics view of a subscription: its status and running
     /// totals, without the cost of returning the full `Subscription`.
     pub fn get_subscription_summary(
@@ -856,6 +803,8 @@ impl SubscriptionContract {
             total_charged: sub.total_charged,
             next_charge_ledger: sub.next_charge_ledger,
         })
+    }
+
     /// Page of a subscriber's subscriptions, oldest first.
     ///
     /// A `limit` of 0 returns an empty vector.
@@ -878,32 +827,8 @@ impl SubscriptionContract {
         limit: u32,
     ) -> Result<Vec<Subscription>, Error> {
         Self::load_indexed_page(&env, &DataKey::ByMerchant(merchant), offset, limit)
-    /// Number of subscriptions created from a plan. Returns 0 for plan_id=0
-    /// (ad-hoc subscriptions are never indexed by plan).
-    pub fn count_by_plan(env: Env, plan_id: u64) -> u32 {
-        storage::read_index(&env, &DataKey::ByPlan(plan_id)).len()
     }
 
-    /// Subscriptions from a plan, oldest first. Returns up to `limit` entries
-    /// starting at `offset`. Ad-hoc subscriptions (plan_id=0) are never indexed
-    /// here, so this always returns an empty vec for plan_id=0.
-    pub fn get_by_plan_page(
-        env: Env,
-        plan_id: u64,
-        offset: u32,
-        limit: u32,
-    ) -> Result<Vec<Subscription>, Error> {
-        if limit == 0 {
-            return Ok(Vec::new(&env));
-        }
-        let ids = storage::read_index(&env, &DataKey::ByPlan(plan_id));
-        let end = offset.checked_add(limit).ok_or(Error::Overflow)?;
-        let len = ids.len();
-        let mut out = Vec::new(&env);
-        for i in offset..end.min(len) {
-            out.push_back(storage::read_sub(&env, ids.get(i).unwrap())?);
-        }
-        Ok(out)
     /// Every subscription created against a plan, oldest first. Ad-hoc
     /// subscriptions (`plan_id` 0) are never indexed, so 0 returns empty.
     pub fn get_by_plan(env: Env, plan_id: u64) -> Result<Vec<Subscription>, Error> {
@@ -1020,18 +945,6 @@ impl SubscriptionContract {
 
     /// Paginated variant of `load_indexed`. A `limit` of 0 returns an empty
     /// vector, consistently across every paginated view.
-    fn load_indexed_page(
-        env: &Env,
-        key: &DataKey,
-        offset: u32,
-        limit: u32,
-    ) -> Result<Vec<Subscription>, Error> {
-        let mut out = Vec::new(env);
-        if limit == 0 {
-            return Ok(out);
-        }
-        for id in storage::read_index(env, key).iter().skip(offset).take(limit) {
-            out.push_back(storage::read_sub(env, id)?);
     fn load_indexed_page(
         env: &Env,
         key: &DataKey,

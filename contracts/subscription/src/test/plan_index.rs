@@ -136,6 +136,15 @@ fn cancelling_removes_the_subscription_from_its_plan_index() {
 
     assert_eq!(s.client.count_by_plan(&plan), 1);
     let listed: std::vec::Vec<u64> = s
+        .client
+        .get_by_plan_page(&plan, &0, &10)
+        .iter()
+        .map(|sub| sub.id)
+        .collect();
+    assert_eq!(listed, std::vec![active]);
+}
+
+#[test]
 fn plan_with_active_and_cancelled_subscriptions_returns_all_ids() {
     let (s, plans) = with_plans();
     let plan = create_plan(&s, &plans);
@@ -155,7 +164,7 @@ fn plan_with_active_and_cancelled_subscriptions_returns_all_ids() {
         .iter()
         .map(|sub| sub.id)
         .collect();
-    assert_eq!(listed, std::vec![active]);
+    assert_eq!(ids, std::vec![a, b, c]);
 }
 
 #[test]
@@ -177,7 +186,6 @@ fn cancelling_an_ad_hoc_subscription_leaves_plan_indexes_untouched() {
         .map(|sub| sub.id)
         .collect();
     assert_eq!(listed, std::vec![indexed]);
-    assert_eq!(ids, std::vec![a, b, c]);
 }
 
 #[test]
@@ -208,6 +216,9 @@ fn ad_hoc_subscription_does_not_appear_in_any_get_by_plan_result() {
 
     // And not in the real plan's index either — only the plan subscription is.
     assert_eq!(s.client.count_by_plan(&plan), 1);
+}
+
+#[test]
 fn subscribing_increments_the_plan_subscriber_count() {
     let (s, plans) = with_plans();
     let plan = create_plan(&s, &plans);

@@ -9,9 +9,7 @@ use soroban_sdk::{
 
 use crate::{
     Error, Plan, PlanContract, PlanContractClient, PlanCreated, PlanDeactivated, PlanReactivated,
-    MAX_NAME_LEN, MAX_PAGE_SIZE,
-    Error, Plan, PlanContract, PlanContractClient, PlanCreated, PlanDeactivated,
-    PlanDescriptionUpdated, MAX_DESCRIPTION_LEN, MAX_NAME_LEN,
+    PlanDescriptionUpdated, MAX_DESCRIPTION_LEN, MAX_NAME_LEN, MAX_PAGE_SIZE,
 };
 
 const AMOUNT: i128 = 500;
@@ -148,7 +146,6 @@ fn create_plan_stores_every_field() {
             amount_per_period: AMOUNT,
             interval_ledgers: INTERVAL,
             default_cap: CAP,
-            description: None,
             active: true,
             created_at: 1_000,
             description: None,
@@ -234,6 +231,7 @@ fn create_plan_stores_and_emits_a_description() {
         amount_per_period: AMOUNT,
         interval_ledgers: INTERVAL,
         default_cap: CAP,
+        created_at: 1_000,
         description: Some(s.name("All the pro features")),
     };
     assert_eq!(
@@ -343,7 +341,7 @@ fn a_default_cap_that_is_not_a_whole_multiple_is_accepted() {
     let s = Setup::new();
     let id = s
         .client
-        .create_plan(&s.merchant, &s.name("Pro"), &s.token, &10, &INTERVAL, &15);
+        .create_plan(&s.merchant, &s.name("Pro"), &s.token, &10, &INTERVAL, &15, &None);
     assert_eq!(s.client.get_plan(&id).default_cap, 15);
 }
 
@@ -507,6 +505,7 @@ fn create_plan_emits_plan_created() {
         interval_ledgers: INTERVAL,
         default_cap: CAP,
         created_at: 1_000,
+        description: None,
     };
     assert_eq!(
         s.env.events().all().filter_by_contract(&s.client.address),
@@ -883,6 +882,9 @@ fn update_plan_description_rejects_too_long_description() {
         .client
         .try_update_plan_description(&s.merchant, &id, &Some(long));
     assert_eq!(result, Err(Ok(Error::InvalidDescription)));
+}
+
+#[test]
 fn get_plan_subscriber_count_is_zero_for_a_fresh_plan() {
     let s = Setup::new();
     let id = s.create(&s.merchant, "Pro");

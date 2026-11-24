@@ -61,7 +61,7 @@ fn refresh_allowance_extends_each_subscription_persistent_ttl() {
     // Move the clock close to the persistent TTL threshold so the next read
     // of each record must extend it.
     s.advance(2 * DAY);
-    let before: Vec<u32> = ids.iter().map(|&id| sub_ttl(&s, id)).collect();
+    let before: std::vec::Vec<u32> = ids.iter().map(|&id| sub_ttl(&s, id)).collect();
 
     s.client.refresh_allowance(&ids);
 
@@ -124,6 +124,8 @@ fn charge_succeeds_after_25_days_with_no_contract_activity() {
 
     s.client.charge(&s.merchant, &id);
     assert_eq!(s.balance(&s.merchant), super::setup::AMOUNT);
+}
+
 /// The persistent TTL of a subscriber's index entry.
 fn subscriber_index_ttl(s: &Setup) -> u32 {
     s.env.as_contract(&s.client.address, || {

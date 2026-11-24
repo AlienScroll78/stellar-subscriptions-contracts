@@ -3,22 +3,15 @@ extern crate std;
 use core::fmt::Debug;
 
 use soroban_sdk::{
-    testutils::{storage::Persistent as _, Address as _, Ledger as _, MockAuth, MockAuthInvoke},
-    testutils::{storage::Persistent as _, Address as _, Ledger, MockAuth, MockAuthInvoke},
-    Address, Env, IntoVal,
-};
-
-use crate::{
-    Error, MerchantStats, RegistryContract, RegistryContractClient, RegistryStats,
-    SubscriptionRecord, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_PAUSED,
-    testutils::{Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
+    testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _, MockAuth, MockAuthInvoke},
     Address, Env, Event, IntoVal,
 };
 
 use crate::{
     events::{SubscriptionRegistered, SubscriptionUpdated},
-    Error, RegistryContract, RegistryContractClient, RegistryStats, SubscriptionRecord,
-    STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_MERCHANT_ENDED, STATUS_PAUSED,
+    Error, MerchantStats, RegistryContract, RegistryContractClient, RegistryStats,
+    SubscriptionRecord, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED, STATUS_MERCHANT_ENDED,
+    STATUS_PAUSED,
 };
 
 struct Setup {
@@ -237,7 +230,7 @@ fn merchant_records_are_listed_with_pagination() {
         s.register(id);
     }
     s.client
-        .register_subscription(&4, &s.subscriber, &other_merchant);
+        .register_subscription(&4, &s.subscriber, &other_merchant, &s.token);
 
     let page = s.client.get_sub_records_by_merchant(&s.merchant, &0, &2);
     let page_ids: std::vec::Vec<u64> = page.iter().map(|r| r.id).collect();
@@ -268,6 +261,9 @@ fn merchant_with_no_subscriptions_gets_an_empty_list() {
         .client
         .get_sub_records_by_merchant(&s.merchant, &5, &10)
         .is_empty());
+}
+
+#[test]
 fn total_charged_volume_overflow_near_i128_max_is_rejected_and_leaves_state_unchanged() {
     let s = Setup::new();
     s.register(1);
@@ -369,7 +365,6 @@ fn merchant_ended_is_an_accepted_status() {
 }
 
 #[test]
-fn merchant_ended_subscriptions_are_final() {
 fn merchant_ended_subscriptions_never_change_again() {
     let s = Setup::new();
     s.register(1);
@@ -399,7 +394,7 @@ fn merchant_ended_subscriptions_never_change_again() {
 
 #[test]
 fn merchant_ended_is_final() {
-    assert!(RegistryContract::is_final(STATUS_MERCHANT_ENDED));
+    assert!(crate::types::is_final(STATUS_MERCHANT_ENDED));
 }
 
 #[test]
@@ -499,7 +494,8 @@ fn merchant_stats_are_kept_per_merchant() {
     let s = Setup::new();
     let other = Address::generate(&s.env);
     s.register(1);
-    s.client.register_subscription(&2, &s.subscriber, &other);
+    s.client
+        .register_subscription(&2, &s.subscriber, &other, &s.token);
 
     assert_eq!(s.client.get_merchant_stats(&s.merchant).subscriptions, 1);
     assert_eq!(s.client.get_merchant_stats(&other).subscriptions, 1);
@@ -630,6 +626,23 @@ fn status_change_moves_the_id_between_indexes() {
 
 #[test]
 fn status_index_pages_by_start_and_limit() {
+    let s = Setup::new();
+    for id in 1..=5 {
+        s.register(id);
+    }
+    let mut collected = std::vec::Vec::new();
+    let mut start = 0;
+    loop {
+        let page = ids(s.client.get_all_subscriptions_page(&start, &2));
+        if page.is_empty() {
+            break;
+        }
+        start += page.len() as u32;
+        collected.extend(page);
+    }
+    assert_eq!(collected, ids(s.client.get_all_subscriptions()));
+}
+
 // ── AllSubscriptions archival ────────────────────────────────────────────────
 
 /// Ledgers in one day, matching `storage.rs`.
@@ -662,6 +675,9 @@ fn keep_alive_extends_the_all_subscriptions_ttl() {
     assert!(
         after > before,
         "keep_alive did not extend AllSubscriptions ({before} -> {after})"
+    );
+}
+
 #[test]
 fn page_returns_the_requested_window_oldest_first() {
     let s = Setup::new();
@@ -719,18 +735,6 @@ fn status_index_rejects_unknown_status_and_oversized_pages() {
             .try_get_sub_records_by_status(&STATUS_ACTIVE, &0, &101),
         Error::PageSizeTooLarge,
     );
-}
-    let mut collected = std::vec::Vec::new();
-    let mut start = 0;
-    loop {
-        let page = ids(s.client.get_all_subscriptions_page(&start, &2));
-        if page.is_empty() {
-            break;
-        }
-        start += page.len() as u32;
-        collected.extend(page);
-    }
-    assert_eq!(collected, ids(s.client.get_all_subscriptions()));
 }
 
 #[test]
@@ -805,6 +809,9 @@ fn keep_alive_on_an_empty_registry_is_a_no_op() {
     let s = Setup::new();
     s.client.keep_alive();
     assert!(s.client.get_all_subscriptions().is_empty());
+}
+
+#[test]
 fn rejected_writes_emit_no_events() {
     let s = Setup::new();
     s.register(7);

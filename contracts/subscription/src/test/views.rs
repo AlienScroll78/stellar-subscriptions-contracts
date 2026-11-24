@@ -10,6 +10,9 @@ fn get_registry_and_get_plan_contract_are_none_before_those_links_are_set() {
     let s = Setup::new();
     assert_eq!(s.client.get_registry(), None);
     assert_eq!(s.client.get_plan_contract(), None);
+}
+
+#[test]
 fn get_by_subscriber_preserves_creation_order_with_interleaved_subscribers() {
     let s = Setup::new();
     let other_subscriber = Address::generate(&s.env);
@@ -360,6 +363,17 @@ fn get_subscription_count_starts_at_zero_and_increments() {
     s.client.subscribe(
         &other_subscriber,
         &s.merchant,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &CAP,
+        &0,
+        &0,
+    );
+    assert_eq!(s.client.get_subscription_count(), 3);
+}
+
+#[test]
 fn paginated_views_return_empty_for_zero_limit() {
     let s = Setup::new();
     let other_merchant = Address::generate(&s.env);
@@ -376,65 +390,6 @@ fn paginated_views_return_empty_for_zero_limit() {
         &0,
         &0,
     );
-    assert_eq!(s.client.get_subscription_count(), 3);
-}
-
-#[test]
-fn get_subscription_count_by_subscriber_counts_per_party() {
-    let s = Setup::new();
-    let other_subscriber = Address::generate(&s.env);
-    let stranger = Address::generate(&s.env);
-
-    assert_eq!(s.client.get_subscription_count_by_subscriber(&s.subscriber), 0);
-
-    s.subscribe();
-    s.subscribe();
-    assert_eq!(s.client.get_subscription_count_by_subscriber(&s.subscriber), 2);
-
-    s.client.subscribe(
-        &other_subscriber,
-        &s.merchant,
-        &s.token.address,
-        &AMOUNT,
-        &INTERVAL,
-        &CAP,
-        &0,
-        &0,
-    );
-    assert_eq!(s.client.get_subscription_count_by_subscriber(&other_subscriber), 1);
-    // The first subscriber's count is unaffected.
-    assert_eq!(s.client.get_subscription_count_by_subscriber(&s.subscriber), 2);
-
-    assert_eq!(s.client.get_subscription_count_by_subscriber(&stranger), 0);
-}
-
-#[test]
-fn get_subscription_count_by_merchant_counts_per_party() {
-    let s = Setup::new();
-    let other_merchant = Address::generate(&s.env);
-    let stranger = Address::generate(&s.env);
-
-    assert_eq!(s.client.get_subscription_count_by_merchant(&s.merchant), 0);
-
-    s.subscribe();
-    s.subscribe();
-    assert_eq!(s.client.get_subscription_count_by_merchant(&s.merchant), 2);
-
-    s.client.subscribe(
-        &s.subscriber,
-        &other_merchant,
-        &s.token.address,
-        &AMOUNT,
-        &INTERVAL,
-        &CAP,
-        &0,
-        &0,
-    );
-    assert_eq!(s.client.get_subscription_count_by_merchant(&other_merchant), 1);
-    // The first merchant's count is unaffected.
-    assert_eq!(s.client.get_subscription_count_by_merchant(&s.merchant), 2);
-
-    assert_eq!(s.client.get_subscription_count_by_merchant(&stranger), 0);
 
     // Sanity check: a positive limit returns entries.
     assert_eq!(s.client.get_by_subscriber_page(&s.subscriber, &0, &10).len(), 2);
@@ -464,4 +419,62 @@ fn get_subscription_count_by_merchant_counts_per_party() {
     // The subscriptions are untouched by the zero-limit queries.
     assert_eq!(s.client.get_by_subscriber(&s.subscriber).len(), 2);
     let _ = (a, b);
+}
+
+#[test]
+fn count_by_subscriber_counts_per_party() {
+    let s = Setup::new();
+    let other_subscriber = Address::generate(&s.env);
+    let stranger = Address::generate(&s.env);
+
+    assert_eq!(s.client.count_by_subscriber(&s.subscriber), 0);
+
+    s.subscribe();
+    s.subscribe();
+    assert_eq!(s.client.count_by_subscriber(&s.subscriber), 2);
+
+    s.client.subscribe(
+        &other_subscriber,
+        &s.merchant,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &CAP,
+        &0,
+        &0,
+    );
+    assert_eq!(s.client.count_by_subscriber(&other_subscriber), 1);
+    // The first subscriber's count is unaffected.
+    assert_eq!(s.client.count_by_subscriber(&s.subscriber), 2);
+
+    assert_eq!(s.client.count_by_subscriber(&stranger), 0);
+}
+
+#[test]
+fn count_by_merchant_counts_per_party() {
+    let s = Setup::new();
+    let other_merchant = Address::generate(&s.env);
+    let stranger = Address::generate(&s.env);
+
+    assert_eq!(s.client.count_by_merchant(&s.merchant), 0);
+
+    s.subscribe();
+    s.subscribe();
+    assert_eq!(s.client.count_by_merchant(&s.merchant), 2);
+
+    s.client.subscribe(
+        &s.subscriber,
+        &other_merchant,
+        &s.token.address,
+        &AMOUNT,
+        &INTERVAL,
+        &CAP,
+        &0,
+        &0,
+    );
+    assert_eq!(s.client.count_by_merchant(&other_merchant), 1);
+    // The first merchant's count is unaffected.
+    assert_eq!(s.client.count_by_merchant(&s.merchant), 2);
+
+    assert_eq!(s.client.count_by_merchant(&stranger), 0);
 }

@@ -1,5 +1,7 @@
 //! `allowance::sync` during `cancel` for a subscriber with many subscriptions.
 
+extern crate std;
+
 use super::setup::{Setup, CAP};
 
 #[test]

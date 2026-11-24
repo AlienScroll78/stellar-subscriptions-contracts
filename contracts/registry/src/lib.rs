@@ -25,31 +25,12 @@ pub const MAX_PAGE_SIZE: u32 = 100;
 pub use errors::Error;
 pub use types::{
     MerchantStats, RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED,
-    STATUS_EXHAUSTED, STATUS_PAUSED,
     STATUS_EXHAUSTED, STATUS_MERCHANT_ENDED, STATUS_PAUSED,
-    STATUS_EXHAUSTED, STATUS_PAUSED,
-    RegistryStats, SubscriptionRecord, Writers, STATUS_ACTIVE, STATUS_CANCELLED, STATUS_EXHAUSTED,
-    STATUS_MERCHANT_ENDED, STATUS_PAUSED,
 };
 
-use soroban_sdk::{contract, contractimpl, Address, Env, Event, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Env, Vec};
 
 use crate::events::{SubscriptionRegistered, SubscriptionUpdated};
-
-/// Version of this contract, bumped on each incompatible change.
-pub const VERSION: u32 = 1;
-
-/// Largest page `get_active_subscriptions_page` will return.
-const MAX_PAGE_SIZE: u32 = 1000;
-
-/// Version of this contract, bumped on each incompatible change.
-pub const VERSION: u32 = 1;
-
-/// Version of this contract.
-pub const VERSION: u32 = 1;
-
-/// Largest page `get_sub_records_by_status` will return.
-pub const MAX_PAGE_SIZE: u32 = 100;
 
 /// The registry contract's entry point.
 // `contract` generates an undocumentable registration shim from this struct.
@@ -107,11 +88,6 @@ impl RegistryContract {
         storage::read_writers(&env)
     }
 
-    /// Version of this contract.
-    pub fn version() -> u32 {
-        VERSION
-    }
-
     /// Count a new plan. Only the plan contract may call this.
     pub fn register_plan(env: Env, plan_id: u64) -> Result<(), Error> {
         storage::read_writers(&env)?.plan_contract.require_auth();
@@ -145,7 +121,7 @@ impl RegistryContract {
             &env,
             &SubscriptionRecord {
                 id: subscription_id,
-                subscriber,
+                subscriber: subscriber.clone(),
                 merchant: merchant.clone(),
                 token,
                 total_charged: 0,
@@ -168,8 +144,6 @@ impl RegistryContract {
         storage::write_stats(&env, &stats);
 
         let mut merchant_stats = storage::read_merchant_stats(&env, &merchant);
-        merchant_stats.total_subscriptions = merchant_stats
-            .total_subscriptions
         merchant_stats.subscriptions = merchant_stats
             .subscriptions
             .checked_add(1)
@@ -259,7 +233,6 @@ impl RegistryContract {
                 .checked_add(1)
                 .ok_or(Error::Overflow)?;
         }
-        storage::write_merchant_stats(&env, &record.merchant, &merchant_stats);
 
         record.total_charged = total_charged;
         record.status = status;
@@ -274,11 +247,6 @@ impl RegistryContract {
         }
         .publish(&env);
         Ok(())
-    }
-
-    /// Version of this contract.
-    pub fn version() -> u32 {
-        VERSION
     }
 
     /// Current aggregate stats across every indexed plan and subscription.
@@ -310,10 +278,10 @@ impl RegistryContract {
             }
         }
         Ok(out)
+    }
+
     /// Current aggregate stats scoped to one merchant. Returns a
     /// zero-valued `MerchantStats` if the merchant has never been indexed.
-    /// Aggregate stats for one merchant's subscriptions. A merchant with no
-    /// subscriptions gets zeroed stats.
     pub fn get_merchant_stats(env: Env, merchant: Address) -> MerchantStats {
         storage::read_merchant_stats(&env, &merchant)
     }
@@ -324,11 +292,6 @@ impl RegistryContract {
         subscription_id: u64,
     ) -> Result<SubscriptionRecord, Error> {
         storage::read_record(&env, subscription_id)
-    }
-
-    /// Version of this contract.
-    pub fn version() -> u32 {
-        VERSION
     }
 
     /// Every registered subscription id, oldest first.
@@ -366,12 +329,18 @@ impl RegistryContract {
             if let Some(id) = ids.get(i) {
                 out.push_back(id);
             }
+        }
+        Ok(out)
+    }
+
     /// Extend the TTL of the `AllSubscriptions` history so it cannot archive
     /// while the registry is quiet. Permissionless: it only extends lifetime
     /// and never changes data, so anyone (an operator's cron job, say) may call it.
     pub fn keep_alive(env: Env) {
         storage::bump_instance(&env);
         storage::keep_all_subscriptions_alive(&env);
+    }
+
     /// One page of Active subscription ids.
     ///
     /// Looks at the registered ids in positions `start..start + limit` (oldest
@@ -383,18 +352,11 @@ impl RegistryContract {
     /// `limit` must be between 1 and 1000; anything else returns
     /// `PageSizeTooLarge`. A `start` past the end returns an empty page.
     pub fn get_active_subscriptions_page(
-    /// One page of registered subscription ids, oldest first.
-    ///
-    /// Returns at most `limit` ids starting at index `start`. A `start` at or
-    /// past the end returns an empty page. `limit` must not exceed
-    /// [`MAX_PAGE_SIZE`], otherwise `PageSizeTooLarge` is returned.
-    pub fn get_all_subscriptions_page(
         env: Env,
         start: u32,
         limit: u32,
     ) -> Result<Vec<u64>, Error> {
         if limit == 0 || limit > MAX_PAGE_SIZE {
-        if limit > MAX_PAGE_SIZE {
             return Err(Error::PageSizeTooLarge);
         }
         let ids = storage::read_all_ids(&env);
@@ -406,6 +368,26 @@ impl RegistryContract {
                     out.push_back(id);
                 }
             }
+        }
+        Ok(out)
+    }
+
+    /// One page of registered subscription ids, oldest first.
+    ///
+    /// Returns at most `limit` ids starting at index `start`. A `start` at or
+    /// past the end returns an empty page. `limit` must not exceed
+    /// [`MAX_PAGE_SIZE`], otherwise `PageSizeTooLarge` is returned.
+    pub fn get_all_subscriptions_page(
+        env: Env,
+        start: u32,
+        limit: u32,
+    ) -> Result<Vec<u64>, Error> {
+        if limit == 0 || limit > MAX_PAGE_SIZE {
+            return Err(Error::PageSizeTooLarge);
+        }
+        let ids = storage::read_all_ids(&env);
+        let end = start.saturating_add(limit).min(ids.len());
+        let mut out = Vec::new(&env);
         let mut index = start;
         while index < end {
             out.push_back(ids.get_unchecked(index));
